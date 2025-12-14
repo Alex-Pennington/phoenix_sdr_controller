@@ -20,9 +20,6 @@ typedef struct {
     /* Main frequency display area */
     SDL_Rect freq_area;
     
-    /* Spectrum/waterfall placeholder */
-    SDL_Rect spectrum_area;
-    
     /* Control panels */
     SDL_Rect gain_panel;
     SDL_Rect tuning_panel;
@@ -73,14 +70,10 @@ typedef struct {
     widget_led_t led_streaming;
     widget_led_t led_overload;
     
-    /* S-Meter */
-    widget_smeter_t smeter;
-    
     /* Panels */
     widget_panel_t panel_freq;
     widget_panel_t panel_gain;
     widget_panel_t panel_config;
-    widget_panel_t panel_spectrum;
     
 } ui_layout_t;
 
@@ -138,8 +131,5 @@ void ui_layout_draw_header(ui_layout_t* layout, const app_state_t* state);
 
 /* Draw status bar */
 void ui_layout_draw_footer(ui_layout_t* layout, const app_state_t* state);
-
-/* Draw spectrum placeholder */
-void ui_layout_draw_spectrum_placeholder(ui_layout_t* layout);
 
 #endif /* UI_LAYOUT_H */

@@ -7,3 +7,14 @@
 30	1102	7874534663485247	CMakeFiles/phoenix_sdr_controller.dir/src/sdr_protocol.c.obj	6c8b43e142eb4a4c
 26	880	7874534862162564	CMakeFiles/phoenix_sdr_controller.dir/src/ui_widgets.c.obj	529a97b3e06c91a9
 881	1520	7874534870707333	phoenix_sdr_controller.exe	c1505650e5af8bbb
+3	165	7874543240673483	build.ninja	2f9f0021ef91b9dc
+3	165	7874543240673483	D:/claude_sandbox/phoenix_sdr_controller/build/cmake_install.cmake	2f9f0021ef91b9dc
+18	28	7874543241153508	clean	b1be2337a84b6750
+35	1037	7874543241716135	CMakeFiles/phoenix_sdr_controller.dir/src/app_state.c.obj	f7ea821ec95f6c2a
+17	1046	7874543241521956	CMakeFiles/phoenix_sdr_controller.dir/src/tcp_client.c.obj	829f3d7d48eccc51
+12	1055	7874543241481973	CMakeFiles/phoenix_sdr_controller.dir/src/main.c.obj	d5ff15776a3fa132
+20	1057	7874543241562799	CMakeFiles/phoenix_sdr_controller.dir/src/sdr_protocol.c.obj	6c8b43e142eb4a4c
+27	1060	7874543241638942	CMakeFiles/phoenix_sdr_controller.dir/src/ui_widgets.c.obj	529a97b3e06c91a9
+23	1068	7874543241582871	CMakeFiles/phoenix_sdr_controller.dir/src/ui_core.c.obj	4322358417d64558
+5	803	7874543446892368	CMakeFiles/phoenix_sdr_controller.dir/src/ui_layout.c.obj	a21356cc2dad369d
+803	1618	7874543454895049	phoenix_sdr_controller.exe	c1505650e5af8bbb

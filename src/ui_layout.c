@@ -121,14 +121,10 @@ ui_layout_t* ui_layout_create(ui_core_t* ui)
     widget_led_init(&layout->led_streaming, 0, 0, LED_RADIUS, COLOR_GREEN, COLOR_TEXT_DIM, "Streaming");
     widget_led_init(&layout->led_overload, 0, 0, LED_RADIUS, COLOR_RED, COLOR_TEXT_DIM, "Overload");
     
-    /* S-Meter */
-    widget_smeter_init(&layout->smeter, 0, 0, 200, 20);
-    
     /* Panels */
     widget_panel_init(&layout->panel_freq, 0, 0, 0, 0, "Frequency");
     widget_panel_init(&layout->panel_gain, 0, 0, 0, 0, "Gain Control");
     widget_panel_init(&layout->panel_config, 0, 0, 0, 0, "Configuration");
-    widget_panel_init(&layout->panel_spectrum, 0, 0, 0, 0, "Spectrum");
     
     /* Recalculate to position everything */
     ui_layout_recalculate(layout);
@@ -308,28 +304,6 @@ void ui_layout_recalculate(ui_layout_t* layout)
     
     layout->toggle_notch.x = status_x + 10;
     layout->toggle_notch.y = content_y + 205;
-    
-    /* Spectrum area (bottom) */
-    int spectrum_y = content_y + 230;
-    layout->regions.spectrum_area.x = PANEL_PADDING;
-    layout->regions.spectrum_area.y = spectrum_y;
-    layout->regions.spectrum_area.w = w - PANEL_PADDING * 2;
-    layout->regions.spectrum_area.h = h - spectrum_y - FOOTER_HEIGHT - PANEL_PADDING;
-    
-    if (layout->regions.spectrum_area.h < 100) {
-        layout->regions.spectrum_area.h = 100;
-    }
-    
-    layout->panel_spectrum.x = layout->regions.spectrum_area.x;
-    layout->panel_spectrum.y = layout->regions.spectrum_area.y;
-    layout->panel_spectrum.w = layout->regions.spectrum_area.w;
-    layout->panel_spectrum.h = layout->regions.spectrum_area.h;
-    
-    /* S-Meter in spectrum area */
-    layout->smeter.x = layout->panel_spectrum.x + 10;
-    layout->smeter.y = layout->panel_spectrum.y + 30;
-    layout->smeter.w = layout->panel_spectrum.w - 20;
-    layout->smeter.h = 24;
 }
 
 /*
@@ -492,7 +466,6 @@ void ui_layout_draw(ui_layout_t* layout, const app_state_t* state)
     widget_panel_draw(&layout->panel_freq, layout->ui);
     widget_panel_draw(&layout->panel_gain, layout->ui);
     widget_panel_draw(&layout->panel_config, layout->ui);
-    widget_panel_draw(&layout->panel_spectrum, layout->ui);
     
     /* Draw frequency display */
     widget_freq_display_draw(&layout->freq_display, layout->ui);
@@ -542,12 +515,6 @@ void ui_layout_draw(ui_layout_t* layout, const app_state_t* state)
     /* Draw toggles */
     widget_toggle_draw(&layout->toggle_biast, layout->ui);
     widget_toggle_draw(&layout->toggle_notch, layout->ui);
-    
-    /* Draw spectrum placeholder */
-    ui_layout_draw_spectrum_placeholder(layout);
-    
-    /* Draw S-Meter */
-    widget_smeter_draw(&layout->smeter, layout->ui);
     
     /* Draw footer */
     ui_layout_draw_footer(layout, state);
@@ -601,45 +568,5 @@ void ui_layout_draw_footer(ui_layout_t* layout, const app_state_t* state)
                                0, layout->regions.footer.y + 8, 
                                layout->regions.footer.w - 10, COLOR_GREEN);
         }
-    }
-}
-
-/*
- * Draw spectrum placeholder
- */
-void ui_layout_draw_spectrum_placeholder(ui_layout_t* layout)
-{
-    if (!layout || !layout->ui) return;
-    
-    SDL_Rect* spec = &layout->regions.spectrum_area;
-    
-    /* Draw placeholder text */
-    ui_draw_text_centered(layout->ui, layout->ui->font_large, 
-                          "Spectrum Display (Coming Soon)",
-                          spec->x, spec->y + spec->h / 2 - 10, spec->w, COLOR_TEXT_DIM);
-    
-    /* Draw some fake spectrum bars for visual interest */
-    int bar_count = 64;
-    int bar_width = (spec->w - 20) / bar_count;
-    int bar_x = spec->x + 10;
-    int bar_y = spec->y + 60;
-    int max_bar_h = spec->h - 100;
-    
-    if (max_bar_h < 20) return;
-    
-    for (int i = 0; i < bar_count; i++) {
-        /* Generate pseudo-random bar heights */
-        int h = (max_bar_h * ((i * 7 + 13) % 100)) / 100;
-        h = (h + (i % 10) * 3) % max_bar_h;
-        if (h < 5) h = 5;
-        
-        uint32_t color = (i < bar_count / 3) ? COLOR_GREEN :
-                         (i < 2 * bar_count / 3) ? COLOR_YELLOW : COLOR_RED;
-        
-        /* Dim the bars */
-        color = (color & 0xFFFFFF00) | 0x60;
-        
-        ui_draw_rect(layout->ui, bar_x + i * bar_width, bar_y + max_bar_h - h,
-                     bar_width - 1, h, color);
     }
 }

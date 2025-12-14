@@ -85,7 +85,6 @@
   - Config panel (AGC, sample rate, BW, antenna combos)
   - Hardware toggles (Bias-T with warning, FM Notch)
   - Streaming panel (Start/Stop, status LEDs)
-  - Spectrum placeholder area
   - Footer status bar
 
 - [x] **Protocol Handler - Full** (`src/sdr_protocol.c`) ✅ Complete
