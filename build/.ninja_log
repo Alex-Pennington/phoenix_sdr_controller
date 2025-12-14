@@ -1,0 +1,9 @@
+# ninja log v7
+26	1075	7874534663450748	CMakeFiles/phoenix_sdr_controller.dir/src/tcp_client.c.obj	829f3d7d48eccc51
+21	1081	7874534663390542	CMakeFiles/phoenix_sdr_controller.dir/src/main.c.obj	d5ff15776a3fa132
+44	1082	7874534663636274	CMakeFiles/phoenix_sdr_controller.dir/src/app_state.c.obj	f7ea821ec95f6c2a
+33	1084	7874534663521259	CMakeFiles/phoenix_sdr_controller.dir/src/ui_core.c.obj	4322358417d64558
+40	1097	7874534663591783	CMakeFiles/phoenix_sdr_controller.dir/src/ui_layout.c.obj	a21356cc2dad369d
+30	1102	7874534663485247	CMakeFiles/phoenix_sdr_controller.dir/src/sdr_protocol.c.obj	6c8b43e142eb4a4c
+26	880	7874534862162564	CMakeFiles/phoenix_sdr_controller.dir/src/ui_widgets.c.obj	529a97b3e06c91a9
+881	1520	7874534870707333	phoenix_sdr_controller.exe	c1505650e5af8bbb
