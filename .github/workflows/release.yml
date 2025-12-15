@@ -1,0 +1,118 @@
+# GitHub Actions Release Workflow
+# Triggered when a version tag (v*) is pushed
+# Builds the project and creates a GitHub Release with attestation
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '01f602195983451bc83e72f4214af2cbc495aa94'
+          
+      - name: Install dependencies
+        run: vcpkg install sdl2:x64-windows sdl2-ttf:x64-windows
+        
+      - name: Configure CMake
+        run: cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake -DCMAKE_BUILD_TYPE=Release
+        
+      - name: Build
+        run: cmake --build build --config Release
+        
+      - name: Get version from tag
+        id: version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        
+      - name: Prepare release package
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.VERSION }}"
+          $releaseDir = "phoenix_sdr_controller-$version-win64"
+          
+          # Create release directory
+          New-Item -ItemType Directory -Path $releaseDir -Force
+          
+          # Copy executable
+          Copy-Item "build\phoenix_sdr_controller.exe" $releaseDir\
+          
+          # Copy SDL2 DLLs from vcpkg
+          $vcpkgBin = "vcpkg\installed\x64-windows\bin"
+          if (Test-Path $vcpkgBin) {
+            Copy-Item "$vcpkgBin\SDL2.dll" $releaseDir\ -ErrorAction SilentlyContinue
+            Copy-Item "$vcpkgBin\SDL2_ttf.dll" $releaseDir\ -ErrorAction SilentlyContinue
+          }
+          
+          # Also check build directory for DLLs
+          Get-ChildItem "build\*.dll" | Copy-Item -Destination $releaseDir\ -ErrorAction SilentlyContinue
+          
+          # Create README
+          @"
+          Phoenix SDR Controller v$version
+          ================================
+          
+          A Windows GUI application for remote control of the Phoenix SDR (SDRplay RSP2 Pro).
+          
+          Usage:
+          1. Extract all files to a folder
+          2. Run phoenix_sdr_controller.exe
+          3. Connect to your Phoenix SDR server on port 4535
+          
+          Requirements:
+          - Windows 10 or later (64-bit)
+          - Phoenix SDR server running on target machine
+          
+          For more information, see: https://github.com/Alex-Pennington/phoenix_sdr_controller
+          "@ | Out-File -FilePath "$releaseDir\README.txt" -Encoding UTF8
+          
+          # Create ZIP
+          Compress-Archive -Path $releaseDir -DestinationPath "phoenix_sdr_controller-$version-win64.zip"
+          
+          Write-Host "Created: phoenix_sdr_controller-$version-win64.zip"
+          Get-ChildItem $releaseDir
+          
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: 'phoenix_sdr_controller-${{ steps.version.outputs.VERSION }}-win64.zip'
+          
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Phoenix SDR Controller v${{ steps.version.outputs.VERSION }}
+          body: |
+            ## Phoenix SDR Controller v${{ steps.version.outputs.VERSION }}
+            
+            Windows GUI application for remote control of the Phoenix SDR.
+            
+            ### Installation
+            1. Download `phoenix_sdr_controller-${{ steps.version.outputs.VERSION }}-win64.zip`
+            2. Extract to a folder
+            3. Run `phoenix_sdr_controller.exe`
+            
+            ### Verification
+            This release includes artifact attestation. Verify with:
+            ```
+            gh attestation verify phoenix_sdr_controller-${{ steps.version.outputs.VERSION }}-win64.zip --owner Alex-Pennington
+            ```
+          files: |
+            phoenix_sdr_controller-${{ steps.version.outputs.VERSION }}-win64.zip
+          draft: false
+          prerelease: false

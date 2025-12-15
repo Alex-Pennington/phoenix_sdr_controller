@@ -10,15 +10,15 @@
 #include <stdlib.h>
 
 /* Layout constants */
-#define HEADER_HEIGHT 40
-#define FOOTER_HEIGHT 28
-#define PANEL_PADDING 10
-#define WIDGET_SPACING 8
-#define BUTTON_HEIGHT 32
-#define SLIDER_WIDTH 40
-#define SLIDER_HEIGHT 150
-#define COMBO_HEIGHT 28
-#define LED_RADIUS 6
+#define HEADER_HEIGHT 30
+#define FOOTER_HEIGHT 22
+#define PANEL_PADDING 6
+#define WIDGET_SPACING 4
+#define BUTTON_HEIGHT 24
+#define SLIDER_WIDTH 32
+#define SLIDER_HEIGHT 100
+#define COMBO_HEIGHT 22
+#define LED_RADIUS 5
 
 /* Static combo box items */
 static const char* s_agc_items[] = {"OFF", "5HZ", "50HZ", "100HZ"};
@@ -166,7 +166,8 @@ void ui_layout_destroy(ui_layout_t* layout)
 }
 
 /*
- * Recalculate layout (call on window resize)
+ * Recalculate layout - COMPACT VERSION
+ * Layout: Header with LEDs | Freq row | Tuning+WWV+Presets | Gain|Config|Control columns
  */
 void ui_layout_recalculate(ui_layout_t* layout)
 {
@@ -187,193 +188,222 @@ void ui_layout_recalculate(ui_layout_t* layout)
     layout->regions.footer.w = w;
     layout->regions.footer.h = FOOTER_HEIGHT;
     
+    /* LEDs in header (right side) - spaced for labels */
+    int led_y = HEADER_HEIGHT / 2;
+    layout->led_connected.x = w - 200;
+    layout->led_connected.y = led_y;
+    layout->led_streaming.x = w - 130;
+    layout->led_streaming.y = led_y;
+    layout->led_overload.x = w - 55;
+    layout->led_overload.y = led_y;
+    
     /* Content area */
     int content_y = HEADER_HEIGHT + PANEL_PADDING;
-    int content_h = h - HEADER_HEIGHT - FOOTER_HEIGHT - PANEL_PADDING * 2;
     
-    /* Left column: Frequency and Tuning (width ~450) */
-    int left_w = 450;
-    
-    /* Frequency panel */
+    /* === ROW 1: Frequency display (full width, taller for 32pt font) === */
+    int freq_h = 55;
     layout->regions.freq_area.x = PANEL_PADDING;
     layout->regions.freq_area.y = content_y;
-    layout->regions.freq_area.w = left_w;
-    layout->regions.freq_area.h = 140;
+    layout->regions.freq_area.w = w - PANEL_PADDING * 2;
+    layout->regions.freq_area.h = freq_h;
     
     layout->panel_freq.x = layout->regions.freq_area.x;
     layout->panel_freq.y = layout->regions.freq_area.y;
     layout->panel_freq.w = layout->regions.freq_area.w;
     layout->panel_freq.h = layout->regions.freq_area.h;
     
-    /* Frequency display inside panel */
-    layout->freq_display.x = layout->panel_freq.x + 20;
-    layout->freq_display.y = layout->panel_freq.y + 34;
-    layout->freq_display.w = layout->panel_freq.w - 50;  /* Leave room for offset dot */
-    layout->freq_display.h = 80;
+    /* Frequency display inside panel (vertically centered) */
+    layout->freq_display.x = layout->panel_freq.x + 15;
+    layout->freq_display.y = layout->panel_freq.y + 10;
+    layout->freq_display.w = layout->panel_freq.w - 40;
+    layout->freq_display.h = freq_h - 20;
     
-    /* DC offset dot (next to frequency display) */
-    layout->offset_dot.x = layout->freq_display.x + layout->freq_display.w + 5;
-    layout->offset_dot.y = layout->freq_display.y + (layout->freq_display.h / 2) - 6;
-    layout->offset_dot.w = 12;
-    layout->offset_dot.h = 12;
+    /* DC offset dot (next to frequency) */
+    layout->offset_dot.x = layout->freq_display.x + layout->freq_display.w + 8;
+    layout->offset_dot.y = layout->freq_display.y + (layout->freq_display.h / 2) - 5;
+    layout->offset_dot.w = 10;
+    layout->offset_dot.h = 10;
     
-    /* Tuning panel (below frequency) */
-    layout->regions.tuning_panel.x = PANEL_PADDING;
-    layout->regions.tuning_panel.y = layout->regions.freq_area.y + layout->regions.freq_area.h + PANEL_PADDING;
-    layout->regions.tuning_panel.w = left_w;
-    layout->regions.tuning_panel.h = 60;
+    /* === ROW 2: Tuning buttons + WWV buttons (same row) === */
+    int row2_y = content_y + freq_h + PANEL_PADDING;
+    int btn_spacing = 4;
     
-    /* Tuning buttons */
-    int tuning_y = layout->regions.tuning_panel.y + 15;
-    layout->btn_freq_down.x = layout->regions.tuning_panel.x + 10;
-    layout->btn_freq_down.y = tuning_y;
+    /* Tuning buttons on left */
+    layout->btn_freq_down.x = PANEL_PADDING;
+    layout->btn_freq_down.y = row2_y;
+    layout->btn_freq_down.w = 40;
+    layout->btn_freq_down.h = 22;
     
-    layout->btn_freq_up.x = layout->btn_freq_down.x + 60;
-    layout->btn_freq_up.y = tuning_y;
+    layout->btn_freq_up.x = layout->btn_freq_down.x + layout->btn_freq_down.w + btn_spacing;
+    layout->btn_freq_up.y = row2_y;
+    layout->btn_freq_up.w = 40;
+    layout->btn_freq_up.h = 22;
     
-    layout->btn_step_down.x = layout->btn_freq_up.x + 80;
-    layout->btn_step_down.y = tuning_y;
+    layout->btn_step_down.x = layout->btn_freq_up.x + layout->btn_freq_up.w + 12;
+    layout->btn_step_down.y = row2_y;
+    layout->btn_step_down.w = 30;
+    layout->btn_step_down.h = 22;
     
-    layout->btn_step_up.x = layout->btn_step_down.x + 50;
-    layout->btn_step_up.y = tuning_y;
+    layout->btn_step_up.x = layout->btn_step_down.x + layout->btn_step_down.w + btn_spacing;
+    layout->btn_step_up.y = row2_y;
+    layout->btn_step_up.w = 30;
+    layout->btn_step_up.h = 22;
     
-    /* WWV shortcut buttons (below tuning panel) */
-    int wwv_y = layout->regions.tuning_panel.y + layout->regions.tuning_panel.h + 10;
-    int wwv_x = PANEL_PADDING + 10;
-    int wwv_spacing = 5;
-    
+    /* WWV buttons (after tuning) */
+    int wwv_x = layout->btn_step_up.x + layout->btn_step_up.w + 20;
     layout->btn_wwv_2_5.x = wwv_x;
-    layout->btn_wwv_2_5.y = wwv_y;
-    wwv_x += layout->btn_wwv_2_5.w + wwv_spacing;
+    layout->btn_wwv_2_5.y = row2_y;
+    layout->btn_wwv_2_5.w = 32;
+    layout->btn_wwv_2_5.h = 22;
+    wwv_x += layout->btn_wwv_2_5.w + 3;
     
     layout->btn_wwv_5.x = wwv_x;
-    layout->btn_wwv_5.y = wwv_y;
-    wwv_x += layout->btn_wwv_5.w + wwv_spacing;
+    layout->btn_wwv_5.y = row2_y;
+    layout->btn_wwv_5.w = 28;
+    layout->btn_wwv_5.h = 22;
+    wwv_x += layout->btn_wwv_5.w + 3;
     
     layout->btn_wwv_10.x = wwv_x;
-    layout->btn_wwv_10.y = wwv_y;
-    wwv_x += layout->btn_wwv_10.w + wwv_spacing;
+    layout->btn_wwv_10.y = row2_y;
+    layout->btn_wwv_10.w = 28;
+    layout->btn_wwv_10.h = 22;
+    wwv_x += layout->btn_wwv_10.w + 3;
     
     layout->btn_wwv_15.x = wwv_x;
-    layout->btn_wwv_15.y = wwv_y;
-    wwv_x += layout->btn_wwv_15.w + wwv_spacing;
+    layout->btn_wwv_15.y = row2_y;
+    layout->btn_wwv_15.w = 28;
+    layout->btn_wwv_15.h = 22;
+    wwv_x += layout->btn_wwv_15.w + 3;
     
     layout->btn_wwv_20.x = wwv_x;
-    layout->btn_wwv_20.y = wwv_y;
-    wwv_x += layout->btn_wwv_20.w + wwv_spacing;
+    layout->btn_wwv_20.y = row2_y;
+    layout->btn_wwv_20.w = 28;
+    layout->btn_wwv_20.h = 22;
+    wwv_x += layout->btn_wwv_20.w + 3;
     
     layout->btn_wwv_25.x = wwv_x;
-    layout->btn_wwv_25.y = wwv_y;
-    wwv_x += layout->btn_wwv_25.w + wwv_spacing;
+    layout->btn_wwv_25.y = row2_y;
+    layout->btn_wwv_25.w = 28;
+    layout->btn_wwv_25.h = 22;
+    wwv_x += layout->btn_wwv_25.w + 3;
     
     layout->btn_wwv_30.x = wwv_x;
-    layout->btn_wwv_30.y = wwv_y;
+    layout->btn_wwv_30.y = row2_y;
+    layout->btn_wwv_30.w = 28;
+    layout->btn_wwv_30.h = 22;
     
-    /* Memory preset buttons (row below WWV) */
-    int preset_y = wwv_y + 30;
-    int preset_x = PANEL_PADDING + 10;
-    int preset_spacing = 5;
+    /* === ROW 3: Memory preset buttons === */
+    int row3_y = row2_y + 26;
+    int preset_x = PANEL_PADDING;
     
     for (int i = 0; i < NUM_PRESETS; i++) {
         layout->btn_preset[i].x = preset_x;
-        layout->btn_preset[i].y = preset_y;
-        preset_x += layout->btn_preset[i].w + preset_spacing;
+        layout->btn_preset[i].y = row3_y;
+        layout->btn_preset[i].w = 36;
+        layout->btn_preset[i].h = 22;
+        preset_x += layout->btn_preset[i].w + 4;
     }
     
-    /* Middle column: Gain (width ~120) */
-    int gain_x = left_w + PANEL_PADDING * 2;
-    int gain_w = 120;
+    /* === ROW 4: Three columns - Gain | Config | Control === */
+    int row4_y = row3_y + 28;
+    int col_h = h - row4_y - FOOTER_HEIGHT - PANEL_PADDING;
     
-    layout->regions.gain_panel.x = gain_x;
-    layout->regions.gain_panel.y = content_y;
+    /* Column widths - wider for proper spacing */
+    int gain_w = 100;
+    int config_w = 150;
+    int control_w = w - gain_w - config_w - PANEL_PADDING * 4;
+    if (control_w < 140) control_w = 140;
+    
+    /* Gain panel (left column) */
+    layout->regions.gain_panel.x = PANEL_PADDING;
+    layout->regions.gain_panel.y = row4_y;
     layout->regions.gain_panel.w = gain_w;
-    layout->regions.gain_panel.h = 220;
+    layout->regions.gain_panel.h = col_h;
     
     layout->panel_gain.x = layout->regions.gain_panel.x;
     layout->panel_gain.y = layout->regions.gain_panel.y;
     layout->panel_gain.w = layout->regions.gain_panel.w;
-    layout->panel_gain.h = layout->regions.gain_panel.h;
+    layout->panel_gain.h = col_h;
     
-    /* Gain sliders */
-    layout->slider_gain.x = gain_x + 15;
-    layout->slider_gain.y = content_y + 50;
+    /* Gain sliders (side by side with more spacing) */
+    layout->slider_gain.x = layout->regions.gain_panel.x + 18;
+    layout->slider_gain.y = row4_y + 35;
+    layout->slider_gain.h = col_h - 50;
     
-    layout->slider_lna.x = gain_x + 70;
-    layout->slider_lna.y = content_y + 50;
+    layout->slider_lna.x = layout->regions.gain_panel.x + 60;
+    layout->slider_lna.y = row4_y + 35;
+    layout->slider_lna.h = col_h - 50;
     
-    /* Right column: Config (width ~180) */
-    int config_x = gain_x + gain_w + PANEL_PADDING;
-    int config_w = 180;
-    
+    /* Config panel (middle column) */
+    int config_x = PANEL_PADDING + gain_w + PANEL_PADDING;
     layout->regions.config_panel.x = config_x;
-    layout->regions.config_panel.y = content_y;
+    layout->regions.config_panel.y = row4_y;
     layout->regions.config_panel.w = config_w;
-    layout->regions.config_panel.h = 280;
+    layout->regions.config_panel.h = col_h;
     
-    layout->panel_config.x = layout->regions.config_panel.x;
-    layout->panel_config.y = layout->regions.config_panel.y;
-    layout->panel_config.w = layout->regions.config_panel.w;
-    layout->panel_config.h = layout->regions.config_panel.h;
+    layout->panel_config.x = config_x;
+    layout->panel_config.y = row4_y;
+    layout->panel_config.w = config_w;
+    layout->panel_config.h = col_h;
     
-    /* Config combos */
-    int combo_x = config_x + 10;
-    int combo_y = content_y + 40;
+    /* Config combos (stacked with more vertical spacing for labels) */
+    int combo_x = config_x + 8;
+    int combo_w = config_w - 16;
+    int combo_spacing = 46;  /* More space for label + combo */
     
     layout->combo_agc.x = combo_x;
-    layout->combo_agc.y = combo_y;
-    layout->combo_agc.w = config_w - 20;
+    layout->combo_agc.y = row4_y + 32;
+    layout->combo_agc.w = combo_w;
     
     layout->combo_srate.x = combo_x;
-    layout->combo_srate.y = combo_y + 55;
-    layout->combo_srate.w = config_w - 20;
+    layout->combo_srate.y = row4_y + 32 + combo_spacing;
+    layout->combo_srate.w = combo_w;
     
     layout->combo_bw.x = combo_x;
-    layout->combo_bw.y = combo_y + 110;
-    layout->combo_bw.w = config_w - 20;
+    layout->combo_bw.y = row4_y + 32 + combo_spacing * 2;
+    layout->combo_bw.w = combo_w;
     
     layout->combo_antenna.x = combo_x;
-    layout->combo_antenna.y = combo_y + 165;
-    layout->combo_antenna.w = config_w - 20;
+    layout->combo_antenna.y = row4_y + 32 + combo_spacing * 3;
+    layout->combo_antenna.w = combo_w;
     
-    /* Status panel (rightmost) */
+    /* Control panel (right column) */
     int status_x = config_x + config_w + PANEL_PADDING;
-    int status_w = w - status_x - PANEL_PADDING;
-    if (status_w < 150) status_w = 150;
-    
     layout->regions.status_panel.x = status_x;
-    layout->regions.status_panel.y = content_y;
-    layout->regions.status_panel.w = status_w;
-    layout->regions.status_panel.h = 200;
+    layout->regions.status_panel.y = row4_y;
+    layout->regions.status_panel.w = control_w;
+    layout->regions.status_panel.h = col_h;
     
-    /* Connect and streaming buttons */
-    layout->btn_connect.x = status_x + 10;
-    layout->btn_connect.y = content_y + 10;
-    layout->btn_connect.w = status_w - 20;
+    /* Connect button */
+    layout->btn_connect.x = status_x + 8;
+    layout->btn_connect.y = row4_y + 10;
+    layout->btn_connect.w = control_w - 16;
+    layout->btn_connect.h = 26;
     
-    layout->btn_start.x = status_x + 10;
-    layout->btn_start.y = content_y + 50;
-    layout->btn_start.w = (status_w - 30) / 2;
+    /* Start/Stop buttons (side by side) */
+    int half_btn = (control_w - 24) / 2;
+    layout->btn_start.x = status_x + 8;
+    layout->btn_start.y = row4_y + 44;
+    layout->btn_start.w = half_btn;
+    layout->btn_start.h = 26;
     
-    layout->btn_stop.x = layout->btn_start.x + layout->btn_start.w + 10;
-    layout->btn_stop.y = content_y + 50;
-    layout->btn_stop.w = layout->btn_start.w;
+    layout->btn_stop.x = status_x + 8 + half_btn + 8;
+    layout->btn_stop.y = row4_y + 44;
+    layout->btn_stop.w = half_btn;
+    layout->btn_stop.h = 26;
     
-    /* LEDs */
-    layout->led_connected.x = status_x + 20;
-    layout->led_connected.y = content_y + 100;
+    /* Toggles (below buttons with more spacing) */
+    layout->toggle_biast.x = status_x + 8;
+    layout->toggle_biast.y = row4_y + 82;
     
-    layout->led_streaming.x = status_x + 20;
-    layout->led_streaming.y = content_y + 125;
+    layout->toggle_notch.x = status_x + 8;
+    layout->toggle_notch.y = row4_y + 112;
     
-    layout->led_overload.x = status_x + 20;
-    layout->led_overload.y = content_y + 150;
-    
-    /* Toggles */
-    layout->toggle_biast.x = status_x + 10;
-    layout->toggle_biast.y = content_y + 175;
-    
-    layout->toggle_notch.x = status_x + 10;
-    layout->toggle_notch.y = content_y + 205;
+    /* Tuning panel region (not visible, just for event tracking) */
+    layout->regions.tuning_panel.x = PANEL_PADDING;
+    layout->regions.tuning_panel.y = row2_y;
+    layout->regions.tuning_panel.w = w - PANEL_PADDING * 2;
+    layout->regions.tuning_panel.h = 50;
 }
 
 /*
@@ -663,11 +693,6 @@ void ui_layout_draw(ui_layout_t* layout, const app_state_t* state)
     widget_button_draw(&layout->btn_start, layout->ui);
     widget_button_draw(&layout->btn_stop, layout->ui);
     
-    /* Draw LEDs */
-    widget_led_draw(&layout->led_connected, layout->ui);
-    widget_led_draw(&layout->led_streaming, layout->ui);
-    widget_led_draw(&layout->led_overload, layout->ui);
-    
     /* Draw toggles */
     widget_toggle_draw(&layout->toggle_biast, layout->ui);
     widget_toggle_draw(&layout->toggle_notch, layout->ui);
@@ -689,13 +714,12 @@ void ui_layout_draw_header(ui_layout_t* layout, const app_state_t* state)
                 layout->regions.header.w, layout->regions.header.h - 1, COLOR_ACCENT_DIM);
     
     /* Draw title */
-    ui_draw_text(layout->ui, layout->ui->font_title, APP_NAME, 10, 8, COLOR_ACCENT);
+    ui_draw_text(layout->ui, layout->ui->font_title, APP_NAME, 8, 5, COLOR_ACCENT);
     
-    /* Draw version */
-    char version_str[32];
-    snprintf(version_str, sizeof(version_str), "v%s", APP_VERSION);
-    ui_draw_text_right(layout->ui, layout->ui->font_small, version_str,
-                       0, 14, layout->regions.header.w - 10, COLOR_TEXT_DIM);
+    /* Draw LEDs in header (right side) */
+    widget_led_draw(&layout->led_connected, layout->ui);
+    widget_led_draw(&layout->led_streaming, layout->ui);
+    widget_led_draw(&layout->led_overload, layout->ui);
 }
 
 /*

@@ -12,17 +12,17 @@
 #include <SDL_ttf.h>
 
 /* Window dimensions */
-#define WINDOW_WIDTH 1024
-#define WINDOW_HEIGHT 700
-#define WINDOW_MIN_WIDTH 800
-#define WINDOW_MIN_HEIGHT 600
+#define WINDOW_WIDTH 720
+#define WINDOW_HEIGHT 480
+#define WINDOW_MIN_WIDTH 640
+#define WINDOW_MIN_HEIGHT 400
 
 /* Font sizes */
-#define FONT_SIZE_SMALL 12
-#define FONT_SIZE_NORMAL 14
-#define FONT_SIZE_LARGE 18
-#define FONT_SIZE_FREQ 48
-#define FONT_SIZE_TITLE 24
+#define FONT_SIZE_SMALL 11
+#define FONT_SIZE_NORMAL 13
+#define FONT_SIZE_LARGE 16
+#define FONT_SIZE_FREQ 32
+#define FONT_SIZE_TITLE 18
 
 /* UI Core context */
 typedef struct {

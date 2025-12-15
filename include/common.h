@@ -33,8 +33,12 @@
     #define CLOSE_SOCKET(s) close(s)
 #endif
 
-/* Application version */
-#define APP_VERSION "0.3.0"
+/* Version info - include generated header */
+#include "version.h"
+
+/* Application version (from version.h) */
+#define APP_VERSION VERSION_STRING
+#define APP_VERSION_FULL VERSION_DETAILED
 #define APP_NAME "Phoenix SDR Controller"
 
 /* Protocol constants */
