@@ -116,6 +116,21 @@ ui_layout_t* ui_layout_create(ui_core_t* ui)
     widget_toggle_init(&layout->toggle_biast, 0, 0, "Bias-T");
     widget_toggle_init(&layout->toggle_notch, 0, 0, "FM Notch");
     
+    /* WWV frequency shortcut buttons */
+    widget_button_init(&layout->btn_wwv_2_5, 0, 0, 50, 24, "2.5");
+    widget_button_init(&layout->btn_wwv_5, 0, 0, 40, 24, "5");
+    widget_button_init(&layout->btn_wwv_10, 0, 0, 40, 24, "10");
+    widget_button_init(&layout->btn_wwv_15, 0, 0, 40, 24, "15");
+    widget_button_init(&layout->btn_wwv_20, 0, 0, 40, 24, "20");
+    widget_button_init(&layout->btn_wwv_25, 0, 0, 40, 24, "25");
+    widget_button_init(&layout->btn_wwv_30, 0, 0, 40, 24, "30");
+    
+    /* DC offset dot (positioned in recalculate) */
+    layout->offset_dot.x = 0;
+    layout->offset_dot.y = 0;
+    layout->offset_dot.w = 12;
+    layout->offset_dot.h = 12;
+    
     /* LEDs */
     widget_led_init(&layout->led_connected, 0, 0, LED_RADIUS, COLOR_GREEN, COLOR_RED, "Connected");
     widget_led_init(&layout->led_streaming, 0, 0, LED_RADIUS, COLOR_GREEN, COLOR_TEXT_DIM, "Streaming");

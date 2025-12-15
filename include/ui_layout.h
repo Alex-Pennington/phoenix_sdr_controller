@@ -65,6 +65,18 @@ typedef struct {
     widget_toggle_t toggle_biast;
     widget_toggle_t toggle_notch;
     
+    /* DC offset indicator (clickable dot next to freq display) */
+    SDL_Rect offset_dot;
+    
+    /* WWV frequency shortcut buttons */
+    widget_button_t btn_wwv_2_5;
+    widget_button_t btn_wwv_5;
+    widget_button_t btn_wwv_10;
+    widget_button_t btn_wwv_15;
+    widget_button_t btn_wwv_20;
+    widget_button_t btn_wwv_25;
+    widget_button_t btn_wwv_30;
+    
     /* Status LEDs */
     widget_led_t led_connected;
     widget_led_t led_streaming;
@@ -105,6 +117,9 @@ typedef struct {
     bool step_down;
     bool freq_up;
     bool freq_down;
+    bool dc_offset_toggled;
+    bool wwv_clicked;
+    int64_t wwv_frequency;  /* Which WWV freq was clicked */
 } ui_actions_t;
 
 /* Create layout */

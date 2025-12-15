@@ -83,6 +83,7 @@ void app_state_reset(app_state_t* state)
     state->selected_digit = -1;
     state->freq_input_active = false;
     state->freq_input_buffer[0] = '\0';
+    state->dc_offset_enabled = false;
     
     /* Connection status */
     state->conn_state = CONN_DISCONNECTED;

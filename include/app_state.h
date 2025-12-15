@@ -54,6 +54,7 @@ typedef struct {
     int selected_digit;  /* 0-9, for frequency digit selection */
     bool freq_input_active;
     char freq_input_buffer[32];
+    bool dc_offset_enabled;  /* +450 Hz DC offset toggle */
     
     /* Connection status */
     connection_state_t conn_state;

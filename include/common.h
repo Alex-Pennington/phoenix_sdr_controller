@@ -50,9 +50,21 @@
 #define GAIN_MIN 20
 #define GAIN_MAX 59
 #define LNA_MIN 0
-#define LNA_MAX 8
+#define LNA_MAX 9
 #define SRATE_MIN 2000000
 #define SRATE_MAX 10000000
+
+/* DC offset for tuning (Hz) */
+#define DC_OFFSET_HZ 450
+
+/* WWV frequencies (Hz) */
+#define WWV_2_5_MHZ  2500000LL
+#define WWV_5_MHZ    5000000LL
+#define WWV_10_MHZ  10000000LL
+#define WWV_15_MHZ  15000000LL
+#define WWV_20_MHZ  20000000LL
+#define WWV_25_MHZ  25000000LL
+#define WWV_30_MHZ  30000000LL
 
 /* AGC modes */
 typedef enum {
