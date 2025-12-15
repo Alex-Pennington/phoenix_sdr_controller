@@ -11,6 +11,7 @@
 #include "ui_core.h"
 #include "ui_widgets.h"
 #include "ui_layout.h"
+#include "process_manager.h"
 
 #include <SDL.h>
 
@@ -25,6 +26,7 @@ typedef struct {
     app_state_t* state;
     ui_core_t* ui;
     ui_layout_t* layout;
+    process_manager_t proc_mgr;
 } app_context_t;
 
 /* Forward declarations */
@@ -83,6 +85,9 @@ int main(int argc, char* argv[])
         
         /* Sync UI state from app state */
         ui_layout_sync_state(app.layout, app.state);
+        
+        /* Sync process button states */
+        ui_layout_sync_process_state(app.layout, &app.proc_mgr);
         
         /* Update UI and get actions */
         ui_layout_update(app.layout, &mouse, NULL, &actions);
@@ -177,6 +182,12 @@ static bool app_init(app_context_t* app)
         return false;
     }
     
+    /* Initialize process manager */
+    if (!process_manager_init(&app->proc_mgr)) {
+        LOG_WARN("Failed to initialize process manager - external apps won't be managed");
+        /* Non-fatal - continue anyway */
+    }
+    
     return true;
 }
 
@@ -185,6 +196,9 @@ static bool app_init(app_context_t* app)
  */
 static void app_shutdown(app_context_t* app)
 {
+    /* Shutdown process manager first (kills child processes) */
+    process_manager_shutdown(&app->proc_mgr);
+    
     /* Disconnect if connected */
     if (app->proto && sdr_is_connected(app->proto)) {
         sdr_disconnect(app->proto);
@@ -379,6 +393,19 @@ static void app_handle_actions(app_context_t* app, const ui_actions_t* actions)
                          "M%d is empty (Ctrl+click to save)", slot + 1);
             }
         }
+    }
+    
+    /* External process control */
+    if (actions->server_toggled) {
+        bool running = process_manager_toggle(&app->proc_mgr, PROC_SDR_SERVER);
+        snprintf(app->state->status_message, sizeof(app->state->status_message),
+                 "SDR Server %s", running ? "started" : "stopped");
+    }
+    
+    if (actions->waterfall_toggled) {
+        bool running = process_manager_toggle(&app->proc_mgr, PROC_WATERFALL);
+        snprintf(app->state->status_message, sizeof(app->state->status_message),
+                 "Waterfall %s", running ? "started" : "stopped");
     }
     
     /* Gain control - always update local state, send to server if connected */

@@ -131,6 +131,10 @@ ui_layout_t* ui_layout_create(ui_core_t* ui)
         widget_button_init(&layout->btn_preset[i], 0, 0, 40, 24, preset_labels[i]);
     }
     
+    /* External process buttons */
+    widget_button_init(&layout->btn_server, 0, 0, 60, 24, "Server");
+    widget_button_init(&layout->btn_waterfall, 0, 0, 60, 24, "Wfall");
+    
     /* DC offset dot (positioned in recalculate) */
     layout->offset_dot.x = 0;
     layout->offset_dot.y = 0;
@@ -304,6 +308,19 @@ void ui_layout_recalculate(ui_layout_t* layout)
         preset_x += layout->btn_preset[i].w + 4;
     }
     
+    /* External process buttons (after presets, with gap) */
+    preset_x += 10;  /* Extra gap */
+    layout->btn_server.x = preset_x;
+    layout->btn_server.y = row3_y;
+    layout->btn_server.w = 52;
+    layout->btn_server.h = 22;
+    preset_x += layout->btn_server.w + 4;
+    
+    layout->btn_waterfall.x = preset_x;
+    layout->btn_waterfall.y = row3_y;
+    layout->btn_waterfall.w = 52;
+    layout->btn_waterfall.h = 22;
+    
     /* === ROW 4: Three columns - Gain | Config | Control === */
     int row4_y = row3_y + 28;
     int col_h = h - row4_y - FOOTER_HEIGHT - PANEL_PADDING;
@@ -463,6 +480,22 @@ void ui_layout_sync_state(ui_layout_t* layout, const app_state_t* state)
 }
 
 /*
+ * Update process button states from process manager
+ */
+void ui_layout_sync_process_state(ui_layout_t* layout, process_manager_t* pm)
+{
+    if (!layout || !pm) return;
+    
+    /* Update server button label based on running state */
+    bool server_running = process_manager_is_running(pm, PROC_SDR_SERVER);
+    layout->btn_server.label = server_running ? "Stop S" : "Server";
+    
+    /* Update waterfall button label based on running state */
+    bool wfall_running = process_manager_is_running(pm, PROC_WATERFALL);
+    layout->btn_waterfall.label = wfall_running ? "Stop W" : "Wfall";
+}
+
+/*
  * Update widgets and get actions
  */
 void ui_layout_update(ui_layout_t* layout, const mouse_state_t* mouse,
@@ -612,6 +645,14 @@ void ui_layout_update(ui_layout_t* layout, const mouse_state_t* mouse,
             actions->preset_save = ctrl_held;
         }
     }
+    
+    /* Update external process buttons */
+    if (widget_button_update(&layout->btn_server, mouse)) {
+        actions->server_toggled = true;
+    }
+    if (widget_button_update(&layout->btn_waterfall, mouse)) {
+        actions->waterfall_toggled = true;
+    }
 }
 
 /*
@@ -673,6 +714,10 @@ void ui_layout_draw(ui_layout_t* layout, const app_state_t* state)
     for (int i = 0; i < NUM_PRESETS; i++) {
         widget_button_draw(&layout->btn_preset[i], layout->ui);
     }
+    
+    /* Draw external process buttons */
+    widget_button_draw(&layout->btn_server, layout->ui);
+    widget_button_draw(&layout->btn_waterfall, layout->ui);
     
     /* Draw gain sliders */
     widget_slider_draw(&layout->slider_gain, layout->ui);

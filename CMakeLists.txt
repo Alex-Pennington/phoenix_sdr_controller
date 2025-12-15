@@ -33,6 +33,7 @@ set(SOURCES
     src/ui_widgets.c
     src/ui_layout.c
     src/app_state.c
+    src/process_manager.c
 )
 
 set(HEADERS
@@ -43,6 +44,7 @@ set(HEADERS
     include/ui_layout.h
     include/app_state.h
     include/common.h
+    include/process_manager.h
 )
 
 # Create executable

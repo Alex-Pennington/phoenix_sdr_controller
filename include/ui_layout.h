@@ -11,6 +11,7 @@
 #include "ui_widgets.h"
 #include "app_state.h"
 #include "sdr_protocol.h"
+#include "process_manager.h"
 
 /* Layout regions */
 typedef struct {
@@ -80,6 +81,10 @@ typedef struct {
     /* Memory preset buttons (M1-M5) */
     widget_button_t btn_preset[NUM_PRESETS];
     
+    /* External process control buttons */
+    widget_button_t btn_server;     /* Start/Stop SDR Server */
+    widget_button_t btn_waterfall;  /* Start/Stop Waterfall */
+    
     /* Status LEDs */
     widget_led_t led_connected;
     widget_led_t led_streaming;
@@ -126,6 +131,8 @@ typedef struct {
     bool preset_clicked;
     int preset_index;       /* Which preset (0-4) */
     bool preset_save;       /* true = save, false = recall */
+    bool server_toggled;    /* Start/Stop SDR Server clicked */
+    bool waterfall_toggled; /* Start/Stop Waterfall clicked */
 } ui_actions_t;
 
 /* Create layout */
@@ -139,6 +146,9 @@ void ui_layout_recalculate(ui_layout_t* layout);
 
 /* Update layout from app state */
 void ui_layout_sync_state(ui_layout_t* layout, const app_state_t* state);
+
+/* Update process button states from process manager */
+void ui_layout_sync_process_state(ui_layout_t* layout, process_manager_t* pm);
 
 /* Update widgets and get actions */
 void ui_layout_update(ui_layout_t* layout, const mouse_state_t* mouse, 
