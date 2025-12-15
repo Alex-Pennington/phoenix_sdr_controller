@@ -54,14 +54,23 @@ Use predefined colors from `common.h`: `COLOR_BG_DARK`, `COLOR_ACCENT`, `COLOR_G
 
 ## Build System
 
-```bash
+**Environment:** Requires `$env:VCPKG_ROOT` environment variable set to vcpkg installation path.
+
+```powershell
 # Prerequisites: vcpkg with SDL2 and SDL2_ttf
 vcpkg install sdl2:x64-windows sdl2-ttf:x64-windows
 
-# Configure and build
-cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=[vcpkg root]/scripts/buildsystems/vcpkg.cmake
+# Configure (uses VCPKG_ROOT env var)
+cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+
+# Build
 cmake --build build --config Release
+
+# Or use the build script
+.\build.ps1 -Release
 ```
+
+**IMPORTANT:** Do not delete the `build/` directory unnecessarily. If reconfiguration is needed, use the cmake command above. See `docs/BUILD.md` for full setup instructions.
 
 ## Implementation Status
 
@@ -81,3 +90,10 @@ Check [PROGRESS.md](../PROGRESS.md) for current implementation status. Headers i
 - Use `LOG_INFO/WARN/ERROR/DEBUG` macros for logging
 - Use `CLAMP()` and `ARRAY_SIZE()` macros from `common.h`
 - Function naming: `module_action()` (e.g., `tcp_client_connect()`, `sdr_set_freq()`)
+
+## Agent Behavior
+
+- **Don't go down rabbit holes.** If a build fails, check the documented build process first before trying alternative approaches.
+- **Don't delete the build directory** unless explicitly asked. Reconfigure instead.
+- **Stay focused on the task.** If asked to add an icon, add an icon—don't rewrite the build system.
+- **Reference this file and `docs/BUILD.md`** before running build commands.

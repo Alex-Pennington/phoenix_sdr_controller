@@ -47,8 +47,13 @@ set(HEADERS
     include/process_manager.h
 )
 
+# Windows resource file (icon)
+if(WIN32)
+    set(RESOURCE_FILE resources/phoenix_sdr.rc)
+endif()
+
 # Create executable
-add_executable(${PROJECT_NAME} WIN32 ${SOURCES} ${HEADERS})
+add_executable(${PROJECT_NAME} WIN32 ${SOURCES} ${HEADERS} ${RESOURCE_FILE})
 
 target_include_directories(${PROJECT_NAME} PRIVATE 
     ${CMAKE_SOURCE_DIR}/include

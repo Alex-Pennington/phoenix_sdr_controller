@@ -550,19 +550,12 @@ static void app_connect(app_context_t* app)
                      "Connected");
         }
         
-        /* Get initial status (only for streaming/overload state) */
+        /* Get initial status and sync UI to server state */
         if (sdr_get_status(app->proto)) {
             app_state_update_from_sdr(app->state, &app->proto->status);
         }
         
-        /* Push our UI settings to the server */
-        sdr_set_freq(app->proto, app->state->frequency);
-        sdr_set_gain(app->proto, app->state->gain);
-        sdr_set_lna(app->proto, app->state->lna);
-        sdr_set_agc(app->proto, app->state->agc);
-        sdr_set_srate(app->proto, app->state->sample_rate);
-        sdr_set_bw(app->proto, app->state->bandwidth);
-        sdr_set_antenna(app->proto, app->state->antenna);
+        /* UI now reflects server state - no need to push settings back */
         
         app->state->last_status_update = ui_get_ticks();
         app->state->last_keepalive = ui_get_ticks();

@@ -1,0 +1,8 @@
+// Phoenix SDR Controller - Windows Resource File
+// This file embeds the application icon into the executable
+
+#include <windows.h>
+
+// Application icon (shows in taskbar, title bar, and file explorer)
+// IDI_ICON1 is the primary icon
+IDI_ICON1 ICON "phoenix_sdr.ico"
