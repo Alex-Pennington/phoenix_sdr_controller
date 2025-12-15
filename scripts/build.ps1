@@ -6,23 +6,22 @@
     Handles building, versioning, tagging, and releasing the Phoenix SDR Controller.
     
 .PARAMETER Action
-    build    - Build the project (default)
-    release  - Increment patch, tag, and push (creates GitHub release via CI)
-    major    - Increment major version, tag, and push
-    minor    - Increment minor version, tag, and push
-    patch    - Increment patch version, tag, and push
+    build    - Build the project (default), increments build number
+    patch    - Increment patch version (0.1.0 → 0.1.1), commit locally
+    minor    - Increment minor version (0.1.0 → 0.2.0), commit locally
+    major    - Increment major version (0.1.0 → 1.0.0), commit locally
+    tag      - Create git tag from current version and push (triggers release)
     clean    - Clean build directory
     
 .EXAMPLE
-    .\build.ps1              # Build only
-    .\build.ps1 release      # Increment patch, tag, push (triggers release)
-    .\build.ps1 major        # Increment major version
-    .\build.ps1 minor        # Increment minor version
+    .\build.ps1              # Build only (increments build number)
+    .\build.ps1 patch        # Bump patch version locally
+    .\build.ps1 tag          # Tag current version and push (triggers GitHub release)
 #>
 
 param(
     [Parameter(Position=0)]
-    [ValidateSet("build", "release", "major", "minor", "patch", "clean")]
+    [ValidateSet("build", "major", "minor", "patch", "tag", "clean")]
     [string]$Action = "build"
 )
 
@@ -135,11 +134,12 @@ function Build-Project {
     Write-Host "`nBuild successful: v$($v.Major).$($v.Minor).$($v.Patch).$($v.Build)" -ForegroundColor Green
 }
 
-# Create release tag and push
-function New-Release {
-    param([string]$IncrementType = "patch")
+# Bump version locally (no tag, no push)
+function Bump-Version {
+    param([string]$IncrementType)
     
     $v = Get-Version
+    $oldVersion = "$($v.Major).$($v.Minor).$($v.Patch)"
     
     # Increment version
     switch ($IncrementType) {
@@ -156,33 +156,57 @@ function New-Release {
             $v.Patch++
         }
     }
-    $v.Build = 0  # Reset build number for release
+    $v.Build = 0  # Reset build number for new version
     
     $versionString = Set-Version -Major $v.Major -Minor $v.Minor -Patch $v.Patch -Build $v.Build
+    
+    Write-Host "`n=== Version Bump: $oldVersion -> $versionString ===" -ForegroundColor Cyan
+    
+    # Commit version change
+    Write-Host "Committing version update..." -ForegroundColor Yellow
+    git -C $ProjectRoot add $VersionFile
+    git -C $ProjectRoot commit -m "Bump version to $versionString"
+    if ($LASTEXITCODE -ne 0) { throw "Git commit failed" }
+    
+    Write-Host "`nVersion bumped to $versionString (committed locally)" -ForegroundColor Green
+    Write-Host "Run '.\build.ps1 tag' when ready to release." -ForegroundColor Cyan
+}
+
+# Create tag from current version and push (triggers release)
+function Push-Tag {
+    $v = Get-Version
+    $versionString = "$($v.Major).$($v.Minor).$($v.Patch)"
     $tag = "v$versionString"
     
-    Write-Host "`n=== Creating Release $tag ===" -ForegroundColor Cyan
+    Write-Host "`n=== Creating Release Tag $tag ===" -ForegroundColor Cyan
     
     # Check for uncommitted changes
     $status = git -C $ProjectRoot status --porcelain
     if ($status) {
-        # Commit version change
-        Write-Host "Committing version update..." -ForegroundColor Yellow
-        git -C $ProjectRoot add $VersionFile
-        git -C $ProjectRoot commit -m "Release $tag"
-        if ($LASTEXITCODE -ne 0) { throw "Git commit failed" }
+        Write-Host "ERROR: You have uncommitted changes. Commit or stash them first." -ForegroundColor Red
+        git -C $ProjectRoot status --short
+        throw "Uncommitted changes detected"
     }
     
-    # Create tag
+    # Check if tag already exists
+    $existingTag = git -C $ProjectRoot tag -l $tag 2>$null
+    if ($existingTag) {
+        Write-Host "ERROR: Tag $tag already exists!" -ForegroundColor Red
+        throw "Tag already exists"
+    }
+    
+    # Create annotated tag
     Write-Host "Creating tag $tag..." -ForegroundColor Yellow
     git -C $ProjectRoot tag -a $tag -m "Release $versionString"
     if ($LASTEXITCODE -ne 0) { throw "Git tag failed" }
     
-    # Push
-    Write-Host "Pushing to origin..." -ForegroundColor Yellow
+    # Push commits first (in case any are pending)
+    Write-Host "Pushing commits to origin..." -ForegroundColor Yellow
     git -C $ProjectRoot push origin main
     if ($LASTEXITCODE -ne 0) { throw "Git push failed" }
     
+    # Push tag (this triggers the release workflow)
+    Write-Host "Pushing tag $tag to origin..." -ForegroundColor Yellow
     git -C $ProjectRoot push origin $tag
     if ($LASTEXITCODE -ne 0) { throw "Git tag push failed" }
     
@@ -204,21 +228,17 @@ switch ($Action) {
     "build" {
         Build-Project
     }
-    "release" {
-        Build-Project
-        New-Release -IncrementType "patch"
-    }
     "major" {
-        Build-Project
-        New-Release -IncrementType "major"
+        Bump-Version -IncrementType "major"
     }
     "minor" {
-        Build-Project
-        New-Release -IncrementType "minor"
+        Bump-Version -IncrementType "minor"
     }
     "patch" {
-        Build-Project
-        New-Release -IncrementType "patch"
+        Bump-Version -IncrementType "patch"
+    }
+    "tag" {
+        Push-Tag
     }
     "clean" {
         Clean-Build
