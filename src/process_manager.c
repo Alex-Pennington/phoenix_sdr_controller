@@ -251,3 +251,146 @@ bool process_manager_toggle(process_manager_t *pm, int index) {
         return process_manager_start(pm, index);
     }
 }
+
+bool process_manager_load_config(process_manager_t *pm, const char *filename) {
+    if (!pm || !filename) return false;
+    
+    FILE *f = fopen(filename, "r");
+    if (!f) {
+        LOG_DEBUG("No config file found: %s", filename);
+        return false;
+    }
+    
+    char line[512];
+    bool in_processes_section = false;
+    
+    while (fgets(line, sizeof(line), f)) {
+        /* Trim newline */
+        char *nl = strchr(line, '\n');
+        if (nl) *nl = '\0';
+        nl = strchr(line, '\r');
+        if (nl) *nl = '\0';
+        
+        /* Skip empty lines and comments */
+        if (line[0] == '\0' || line[0] == ';' || line[0] == '#') continue;
+        
+        /* Section headers */
+        if (line[0] == '[') {
+            in_processes_section = (strcmp(line, "[Processes]") == 0);
+            continue;
+        }
+        
+        /* Key=value pairs in [Processes] section */
+        if (in_processes_section) {
+            char *eq = strchr(line, '=');
+            if (eq) {
+                *eq = '\0';
+                const char *key = line;
+                const char *value = eq + 1;
+                
+                if (strcmp(key, "server_path") == 0) {
+                    strncpy(pm->children[PROC_SDR_SERVER].path, value, PROCESS_PATH_MAX - 1);
+                } else if (strcmp(key, "server_args") == 0) {
+                    strncpy(pm->children[PROC_SDR_SERVER].args, value, PROCESS_ARGS_MAX - 1);
+                } else if (strcmp(key, "server_show_window") == 0) {
+                    pm->children[PROC_SDR_SERVER].show_window = (atoi(value) != 0);
+                } else if (strcmp(key, "waterfall_path") == 0) {
+                    strncpy(pm->children[PROC_WATERFALL].path, value, PROCESS_PATH_MAX - 1);
+                } else if (strcmp(key, "waterfall_args") == 0) {
+                    strncpy(pm->children[PROC_WATERFALL].args, value, PROCESS_ARGS_MAX - 1);
+                } else if (strcmp(key, "waterfall_show_window") == 0) {
+                    pm->children[PROC_WATERFALL].show_window = (atoi(value) != 0);
+                }
+            }
+        }
+    }
+    
+    fclose(f);
+    LOG_INFO("Loaded process config from %s", filename);
+    return true;
+}
+
+bool process_manager_save_config(process_manager_t *pm, const char *filename) {
+    if (!pm || !filename) return false;
+    
+    /* Read existing file content (without [Processes] section) */
+    char *existing_content = NULL;
+    size_t existing_size = 0;
+    
+    FILE *f = fopen(filename, "r");
+    if (f) {
+        /* Read file and filter out [Processes] section */
+        fseek(f, 0, SEEK_END);
+        long file_size = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        
+        if (file_size > 0) {
+            char *buffer = malloc(file_size + 1);
+            existing_content = malloc(file_size + 1);
+            if (buffer && existing_content) {
+                fread(buffer, 1, file_size, f);
+                buffer[file_size] = '\0';
+                
+                /* Copy everything except [Processes] section */
+                char *src = buffer;
+                char *dst = existing_content;
+                bool skip_section = false;
+                
+                while (*src) {
+                    /* Find end of line */
+                    char *eol = strchr(src, '\n');
+                    size_t line_len = eol ? (eol - src + 1) : strlen(src);
+                    
+                    /* Check for section header */
+                    if (src[0] == '[') {
+                        skip_section = (strncmp(src, "[Processes]", 11) == 0);
+                    }
+                    
+                    /* Copy line if not in [Processes] section */
+                    if (!skip_section) {
+                        memcpy(dst, src, line_len);
+                        dst += line_len;
+                    }
+                    
+                    src += line_len;
+                }
+                *dst = '\0';
+                existing_size = dst - existing_content;
+                
+                free(buffer);
+            }
+        }
+        fclose(f);
+    }
+    
+    /* Write file with [Processes] section at end */
+    f = fopen(filename, "w");
+    if (!f) {
+        LOG_ERROR("Failed to open %s for writing", filename);
+        free(existing_content);
+        return false;
+    }
+    
+    /* Write existing content */
+    if (existing_content && existing_size > 0) {
+        fwrite(existing_content, 1, existing_size, f);
+        /* Ensure newline before new section */
+        if (existing_content[existing_size - 1] != '\n') {
+            fprintf(f, "\n");
+        }
+    }
+    free(existing_content);
+    
+    /* Write [Processes] section */
+    fprintf(f, "[Processes]\n");
+    fprintf(f, "server_path=%s\n", pm->children[PROC_SDR_SERVER].path);
+    fprintf(f, "server_args=%s\n", pm->children[PROC_SDR_SERVER].args);
+    fprintf(f, "server_show_window=%d\n", pm->children[PROC_SDR_SERVER].show_window ? 1 : 0);
+    fprintf(f, "waterfall_path=%s\n", pm->children[PROC_WATERFALL].path);
+    fprintf(f, "waterfall_args=%s\n", pm->children[PROC_WATERFALL].args);
+    fprintf(f, "waterfall_show_window=%d\n", pm->children[PROC_WATERFALL].show_window ? 1 : 0);
+    
+    fclose(f);
+    LOG_INFO("Saved process config to %s", filename);
+    return true;
+}

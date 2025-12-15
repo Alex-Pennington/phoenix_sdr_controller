@@ -128,4 +128,24 @@ const char *process_manager_get_name(process_manager_t *pm, int index);
  */
 bool process_manager_toggle(process_manager_t *pm, int index);
 
+/**
+ * Load process configuration from INI file
+ * Looks for [Processes] section with server_path, server_args, etc.
+ * 
+ * @param pm        Process manager
+ * @param filename  INI file path
+ * @return          true if loaded successfully
+ */
+bool process_manager_load_config(process_manager_t *pm, const char *filename);
+
+/**
+ * Save process configuration to INI file
+ * Appends [Processes] section to existing file
+ * 
+ * @param pm        Process manager
+ * @param filename  INI file path
+ * @return          true if saved successfully
+ */
+bool process_manager_save_config(process_manager_t *pm, const char *filename);
+
 #endif /* PROCESS_MANAGER_H */

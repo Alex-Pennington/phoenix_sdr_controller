@@ -186,6 +186,9 @@ static bool app_init(app_context_t* app)
     if (!process_manager_init(&app->proc_mgr)) {
         LOG_WARN("Failed to initialize process manager - external apps won't be managed");
         /* Non-fatal - continue anyway */
+    } else {
+        /* Load process paths from config file */
+        process_manager_load_config(&app->proc_mgr, PRESETS_FILENAME);
     }
     
     return true;
@@ -196,7 +199,10 @@ static bool app_init(app_context_t* app)
  */
 static void app_shutdown(app_context_t* app)
 {
-    /* Shutdown process manager first (kills child processes) */
+    /* Save process config before shutdown */
+    process_manager_save_config(&app->proc_mgr, PRESETS_FILENAME);
+    
+    /* Shutdown process manager (kills child processes) */
     process_manager_shutdown(&app->proc_mgr);
     
     /* Disconnect if connected */
