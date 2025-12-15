@@ -103,23 +103,18 @@ jobs:
           Get-ChildItem "build\Release\*.dll" -ErrorAction SilentlyContinue | Copy-Item -Destination $releaseDir\ -ErrorAction SilentlyContinue
           
           # Create README
-          @"
-Phoenix SDR Controller v$version
-================================
-
-A Windows GUI application for remote control of the Phoenix SDR (SDRplay RSP2 Pro).
-
-Usage:
-1. Extract all files to a folder
-2. Run phoenix_sdr_controller.exe
-3. Connect to your Phoenix SDR server on port 4535
-
-Requirements:
-- Windows 10 or later (64-bit)
-- Phoenix SDR server running on target machine
-
-For more information, see: https://github.com/Alex-Pennington/phoenix_sdr_controller
-"@ | Out-File -FilePath "$releaseDir\README.txt" -Encoding UTF8
+          $readme = "Phoenix SDR Controller v$version`n"
+          $readme += "================================`n`n"
+          $readme += "A Windows GUI application for remote control of the Phoenix SDR (SDRplay RSP2 Pro).`n`n"
+          $readme += "Usage:`n"
+          $readme += "1. Extract all files to a folder`n"
+          $readme += "2. Run phoenix_sdr_controller.exe`n"
+          $readme += "3. Connect to your Phoenix SDR server on port 4535`n`n"
+          $readme += "Requirements:`n"
+          $readme += "- Windows 10 or later (64-bit)`n"
+          $readme += "- Phoenix SDR server running on target machine`n`n"
+          $readme += "For more information, see: https://github.com/Alex-Pennington/phoenix_sdr_controller`n"
+          $readme | Out-File -FilePath "$releaseDir\README.txt" -Encoding UTF8
           
           # List contents for debugging
           Write-Host "Release package contents:"
