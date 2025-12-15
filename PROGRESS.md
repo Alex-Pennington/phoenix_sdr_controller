@@ -230,6 +230,11 @@ src/
 
 ## Recent Changes
 
+- **Memory Presets (M1-M5)**: Added 5 memory preset buttons below WWV shortcuts
+  - Short click: Recall preset (loads all settings)
+  - Ctrl+click: Save current settings to preset
+  - Presets saved to `phoenix_sdr_presets.ini` on exit
+  - Stores: frequency, gain, LNA, AGC, sample rate, bandwidth, antenna, DC offset, notch
 - **LNA State**: Antenna-dependent limits (0-8 for A/B, 0-4 for Hi-Z)
 - **LNA Auto-clamp**: Switching to Hi-Z antenna auto-clamps LNA to 4 if higher
 - **GAIN_CHANGE Notification**: Now uses `GR_ACTUAL=` and `LNA_GR=` (informational only)
@@ -241,12 +246,12 @@ src/
 
 ## Next Steps
 
-1. Create `src/` directory
-2. Implement `tcp_client.c` (Winsock TCP)
-3. Implement `app_state.c` (state management)
-4. Implement `sdr_protocol.c` (core commands)
-5. Implement `ui_core.c` (SDL2 basics)
-6. Continue with remaining files...
+1. ~~Create `src/` directory~~ ✅
+2. ~~Implement `tcp_client.c` (Winsock TCP)~~ ✅
+3. ~~Implement `app_state.c` (state management)~~ ✅
+4. ~~Implement `sdr_protocol.c` (core commands)~~ ✅
+5. ~~Implement `ui_core.c` (SDL2 basics)~~ ✅
+6. Testing and Polish
 
 ---
 

@@ -67,6 +67,26 @@
 #define WWV_25_MHZ  25000000LL
 #define WWV_30_MHZ  30000000LL
 
+/* Memory presets */
+#define NUM_PRESETS 5
+#define PRESET_NAME_MAX 32
+#define PRESETS_FILENAME "phoenix_sdr_presets.ini"
+
+/* Preset structure */
+typedef struct {
+    bool valid;                         /* True if preset has been saved */
+    char name[PRESET_NAME_MAX];         /* User-defined name */
+    int64_t frequency;
+    int gain;
+    int lna;
+    int agc;                            /* agc_mode_t */
+    int sample_rate;
+    int bandwidth;
+    int antenna;                        /* antenna_port_t */
+    bool dc_offset_enabled;
+    bool notch;
+} sdr_preset_t;
+
 /* AGC modes */
 typedef enum {
     AGC_OFF = 0,

@@ -48,6 +48,9 @@ typedef struct {
     bool streaming;
     bool overload;
     
+    /* Memory presets */
+    sdr_preset_t presets[NUM_PRESETS];
+    
     /* UI state */
     ui_mode_t ui_mode;
     tuning_step_t tuning_step;
@@ -100,5 +103,20 @@ tuning_step_t app_next_step(tuning_step_t current);
 
 /* Cycle to previous tuning step */
 tuning_step_t app_prev_step(tuning_step_t current);
+
+/* Save current settings to a preset slot (0-4) */
+void app_save_preset(app_state_t* state, int slot);
+
+/* Apply a preset slot to current state (0-4) */
+bool app_recall_preset(app_state_t* state, int slot);
+
+/* Get preset info string for tooltip */
+const char* app_get_preset_label(const app_state_t* state, int slot);
+
+/* Save all presets to file */
+bool app_save_presets_to_file(const app_state_t* state, const char* filename);
+
+/* Load all presets from file */
+bool app_load_presets_from_file(app_state_t* state, const char* filename);
 
 #endif /* APP_STATE_H */

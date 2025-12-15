@@ -304,3 +304,198 @@ tuning_step_t app_prev_step(tuning_step_t current)
     idx = (idx - 1 + s_num_steps) % s_num_steps;
     return s_tuning_steps[idx];
 }
+
+/* ========== Memory Presets ========== */
+
+/* Static buffer for preset label */
+static char s_preset_label[64];
+
+/*
+ * Save current settings to a preset slot
+ */
+void app_save_preset(app_state_t* state, int slot)
+{
+    if (!state || slot < 0 || slot >= NUM_PRESETS) return;
+    
+    sdr_preset_t* p = &state->presets[slot];
+    
+    p->valid = true;
+    snprintf(p->name, sizeof(p->name), "M%d: %s", slot + 1, 
+             app_format_frequency(state->frequency));
+    
+    p->frequency = state->frequency;
+    p->gain = state->gain;
+    p->lna = state->lna;
+    p->agc = (int)state->agc;
+    p->sample_rate = state->sample_rate;
+    p->bandwidth = state->bandwidth;
+    p->antenna = (int)state->antenna;
+    p->dc_offset_enabled = state->dc_offset_enabled;
+    p->notch = state->notch;
+    
+    LOG_INFO("Saved preset M%d: freq=%lld, gain=%d, lna=%d", 
+             slot + 1, (long long)p->frequency, p->gain, p->lna);
+}
+
+/*
+ * Apply a preset slot to current state
+ */
+bool app_recall_preset(app_state_t* state, int slot)
+{
+    if (!state || slot < 0 || slot >= NUM_PRESETS) return false;
+    
+    sdr_preset_t* p = &state->presets[slot];
+    if (!p->valid) {
+        LOG_INFO("Preset M%d is empty", slot + 1);
+        return false;
+    }
+    
+    state->frequency = p->frequency;
+    state->gain = p->gain;
+    state->lna = p->lna;
+    state->agc = (agc_mode_t)p->agc;
+    state->sample_rate = p->sample_rate;
+    state->bandwidth = p->bandwidth;
+    state->antenna = (antenna_port_t)p->antenna;
+    state->dc_offset_enabled = p->dc_offset_enabled;
+    state->notch = p->notch;
+    
+    LOG_INFO("Recalled preset M%d: freq=%lld", slot + 1, (long long)p->frequency);
+    return true;
+}
+
+/*
+ * Get preset info string for button label
+ */
+const char* app_get_preset_label(const app_state_t* state, int slot)
+{
+    if (!state || slot < 0 || slot >= NUM_PRESETS) {
+        return "M?";
+    }
+    
+    const sdr_preset_t* p = &state->presets[slot];
+    if (p->valid) {
+        snprintf(s_preset_label, sizeof(s_preset_label), "M%d", slot + 1);
+    } else {
+        snprintf(s_preset_label, sizeof(s_preset_label), "M%d", slot + 1);
+    }
+    return s_preset_label;
+}
+
+/*
+ * Save all presets to file
+ */
+bool app_save_presets_to_file(const app_state_t* state, const char* filename)
+{
+    if (!state || !filename) return false;
+    
+    FILE* f = fopen(filename, "w");
+    if (!f) {
+        LOG_ERROR("Failed to open %s for writing", filename);
+        return false;
+    }
+    
+    fprintf(f, "; Phoenix SDR Controller Presets\n");
+    fprintf(f, "; Auto-saved on exit\n\n");
+    
+    for (int i = 0; i < NUM_PRESETS; i++) {
+        const sdr_preset_t* p = &state->presets[i];
+        fprintf(f, "[M%d]\n", i + 1);
+        fprintf(f, "valid=%d\n", p->valid ? 1 : 0);
+        if (p->valid) {
+            fprintf(f, "name=%s\n", p->name);
+            fprintf(f, "frequency=%lld\n", (long long)p->frequency);
+            fprintf(f, "gain=%d\n", p->gain);
+            fprintf(f, "lna=%d\n", p->lna);
+            fprintf(f, "agc=%d\n", p->agc);
+            fprintf(f, "sample_rate=%d\n", p->sample_rate);
+            fprintf(f, "bandwidth=%d\n", p->bandwidth);
+            fprintf(f, "antenna=%d\n", p->antenna);
+            fprintf(f, "dc_offset=%d\n", p->dc_offset_enabled ? 1 : 0);
+            fprintf(f, "notch=%d\n", p->notch ? 1 : 0);
+        }
+        fprintf(f, "\n");
+    }
+    
+    fclose(f);
+    LOG_INFO("Saved presets to %s", filename);
+    return true;
+}
+
+/*
+ * Load all presets from file
+ */
+bool app_load_presets_from_file(app_state_t* state, const char* filename)
+{
+    if (!state || !filename) return false;
+    
+    FILE* f = fopen(filename, "r");
+    if (!f) {
+        LOG_DEBUG("No preset file found: %s", filename);
+        return false;
+    }
+    
+    char line[256];
+    int current_slot = -1;
+    sdr_preset_t* p = NULL;
+    
+    while (fgets(line, sizeof(line), f)) {
+        /* Trim newline */
+        char* nl = strchr(line, '\n');
+        if (nl) *nl = '\0';
+        nl = strchr(line, '\r');
+        if (nl) *nl = '\0';
+        
+        /* Skip empty lines and comments */
+        if (line[0] == '\0' || line[0] == ';' || line[0] == '#') continue;
+        
+        /* Section header [M1], [M2], etc. */
+        if (line[0] == '[' && line[1] == 'M') {
+            int slot = line[2] - '1';
+            if (slot >= 0 && slot < NUM_PRESETS) {
+                current_slot = slot;
+                p = &state->presets[slot];
+                memset(p, 0, sizeof(sdr_preset_t));
+            }
+            continue;
+        }
+        
+        /* Key=value pairs */
+        if (current_slot >= 0 && p) {
+            char* eq = strchr(line, '=');
+            if (eq) {
+                *eq = '\0';
+                const char* key = line;
+                const char* value = eq + 1;
+                
+                if (strcmp(key, "valid") == 0) {
+                    p->valid = (atoi(value) != 0);
+                } else if (strcmp(key, "name") == 0) {
+                    strncpy(p->name, value, sizeof(p->name) - 1);
+                } else if (strcmp(key, "frequency") == 0) {
+                    p->frequency = atoll(value);
+                } else if (strcmp(key, "gain") == 0) {
+                    p->gain = atoi(value);
+                } else if (strcmp(key, "lna") == 0) {
+                    p->lna = atoi(value);
+                } else if (strcmp(key, "agc") == 0) {
+                    p->agc = atoi(value);
+                } else if (strcmp(key, "sample_rate") == 0) {
+                    p->sample_rate = atoi(value);
+                } else if (strcmp(key, "bandwidth") == 0) {
+                    p->bandwidth = atoi(value);
+                } else if (strcmp(key, "antenna") == 0) {
+                    p->antenna = atoi(value);
+                } else if (strcmp(key, "dc_offset") == 0) {
+                    p->dc_offset_enabled = (atoi(value) != 0);
+                } else if (strcmp(key, "notch") == 0) {
+                    p->notch = (atoi(value) != 0);
+                }
+            }
+        }
+    }
+    
+    fclose(f);
+    LOG_INFO("Loaded presets from %s", filename);
+    return true;
+}

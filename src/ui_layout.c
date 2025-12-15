@@ -125,6 +125,12 @@ ui_layout_t* ui_layout_create(ui_core_t* ui)
     widget_button_init(&layout->btn_wwv_25, 0, 0, 40, 24, "25");
     widget_button_init(&layout->btn_wwv_30, 0, 0, 40, 24, "30");
     
+    /* Memory preset buttons M1-M5 */
+    static const char* preset_labels[NUM_PRESETS] = {"M1", "M2", "M3", "M4", "M5"};
+    for (int i = 0; i < NUM_PRESETS; i++) {
+        widget_button_init(&layout->btn_preset[i], 0, 0, 40, 24, preset_labels[i]);
+    }
+    
     /* DC offset dot (positioned in recalculate) */
     layout->offset_dot.x = 0;
     layout->offset_dot.y = 0;
@@ -262,6 +268,17 @@ void ui_layout_recalculate(ui_layout_t* layout)
     
     layout->btn_wwv_30.x = wwv_x;
     layout->btn_wwv_30.y = wwv_y;
+    
+    /* Memory preset buttons (row below WWV) */
+    int preset_y = wwv_y + 30;
+    int preset_x = PANEL_PADDING + 10;
+    int preset_spacing = 5;
+    
+    for (int i = 0; i < NUM_PRESETS; i++) {
+        layout->btn_preset[i].x = preset_x;
+        layout->btn_preset[i].y = preset_y;
+        preset_x += layout->btn_preset[i].w + preset_spacing;
+    }
     
     /* Middle column: Gain (width ~120) */
     int gain_x = left_w + PANEL_PADDING * 2;
@@ -553,6 +570,18 @@ void ui_layout_update(ui_layout_t* layout, const mouse_state_t* mouse,
         actions->wwv_clicked = true;
         actions->wwv_frequency = WWV_30_MHZ;
     }
+    
+    /* Update Memory Preset buttons - detect Ctrl key for save vs recall */
+    SDL_Keymod mod = SDL_GetModState();
+    bool ctrl_held = (mod & KMOD_CTRL) != 0;
+    
+    for (int i = 0; i < NUM_PRESETS; i++) {
+        if (widget_button_update(&layout->btn_preset[i], mouse)) {
+            actions->preset_clicked = true;
+            actions->preset_index = i;
+            actions->preset_save = ctrl_held;
+        }
+    }
 }
 
 /*
@@ -609,6 +638,11 @@ void ui_layout_draw(ui_layout_t* layout, const app_state_t* state)
     widget_button_draw(&layout->btn_wwv_20, layout->ui);
     widget_button_draw(&layout->btn_wwv_25, layout->ui);
     widget_button_draw(&layout->btn_wwv_30, layout->ui);
+    
+    /* Draw Memory Preset buttons */
+    for (int i = 0; i < NUM_PRESETS; i++) {
+        widget_button_draw(&layout->btn_preset[i], layout->ui);
+    }
     
     /* Draw gain sliders */
     widget_slider_draw(&layout->slider_gain, layout->ui);

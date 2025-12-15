@@ -77,6 +77,9 @@ typedef struct {
     widget_button_t btn_wwv_25;
     widget_button_t btn_wwv_30;
     
+    /* Memory preset buttons (M1-M5) */
+    widget_button_t btn_preset[NUM_PRESETS];
+    
     /* Status LEDs */
     widget_led_t led_connected;
     widget_led_t led_streaming;
@@ -120,6 +123,9 @@ typedef struct {
     bool dc_offset_toggled;
     bool wwv_clicked;
     int64_t wwv_frequency;  /* Which WWV freq was clicked */
+    bool preset_clicked;
+    int preset_index;       /* Which preset (0-4) */
+    bool preset_save;       /* true = save, false = recall */
 } ui_actions_t;
 
 /* Create layout */

@@ -155,6 +155,11 @@ static bool app_init(app_context_t* app)
         return false;
     }
     
+    /* Load presets from file */
+    if (app_load_presets_from_file(app->state, PRESETS_FILENAME)) {
+        LOG_INFO("Loaded presets from %s", PRESETS_FILENAME);
+    }
+    
     /* Initialize UI */
     char title[128];
     snprintf(title, sizeof(title), "%s v%s", APP_NAME, APP_VERSION);
@@ -197,6 +202,9 @@ static void app_shutdown(app_context_t* app)
     }
     
     if (app->state) {
+        /* Save presets to file before cleanup */
+        app_save_presets_to_file(app->state, PRESETS_FILENAME);
+        
         app_state_destroy(app->state);
         app->state = NULL;
     }
@@ -334,6 +342,42 @@ static void app_handle_actions(app_context_t* app, const ui_actions_t* actions)
             app->state->frequency = display_freq;
             snprintf(app->state->status_message, sizeof(app->state->status_message),
                      "WWV preset: %s (not connected)", app_format_frequency(display_freq));
+        }
+    }
+    
+    /* Memory preset handling */
+    if (actions->preset_clicked) {
+        int slot = actions->preset_index;
+        if (actions->preset_save) {
+            /* Ctrl+click = Save current settings to preset */
+            app_save_preset(app->state, slot);
+            snprintf(app->state->status_message, sizeof(app->state->status_message),
+                     "Saved M%d: %s", slot + 1, app_format_frequency(app->state->frequency));
+        } else {
+            /* Click = Recall preset */
+            if (app_recall_preset(app->state, slot)) {
+                /* Apply preset settings to server if connected */
+                if (sdr_is_connected(app->proto)) {
+                    /* Apply DC offset to frequency when sending */
+                    int64_t actual_freq = app->state->frequency + 
+                                          (app->state->dc_offset_enabled ? DC_OFFSET_HZ : 0);
+                    sdr_set_freq(app->proto, actual_freq);
+                    sdr_set_gain(app->proto, app->state->gain);
+                    sdr_set_lna(app->proto, app->state->lna);
+                    sdr_set_agc(app->proto, app->state->agc);
+                    if (!app->state->streaming) {
+                        sdr_set_srate(app->proto, app->state->sample_rate);
+                        sdr_set_bw(app->proto, app->state->bandwidth);
+                    }
+                    sdr_set_antenna(app->proto, app->state->antenna);
+                    sdr_set_notch(app->proto, app->state->notch);
+                }
+                snprintf(app->state->status_message, sizeof(app->state->status_message),
+                         "Recalled M%d: %s", slot + 1, app_format_frequency(app->state->frequency));
+            } else {
+                snprintf(app->state->status_message, sizeof(app->state->status_message),
+                         "M%d is empty (Ctrl+click to save)", slot + 1);
+            }
         }
     }
     
