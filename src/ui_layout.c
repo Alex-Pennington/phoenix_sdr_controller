@@ -339,14 +339,17 @@ void ui_layout_sync_state(ui_layout_t* layout, const app_state_t* state)
     bool connected = (state->conn_state == CONN_CONNECTED);
     layout->btn_start.enabled = connected && !state->streaming;
     layout->btn_stop.enabled = connected && state->streaming;
-    layout->slider_gain.enabled = connected;
-    layout->slider_lna.enabled = connected;
-    layout->combo_agc.enabled = connected;
-    layout->combo_srate.enabled = connected && !state->streaming;
-    layout->combo_bw.enabled = connected && !state->streaming;
-    layout->combo_antenna.enabled = connected;
-    layout->toggle_biast.enabled = connected;
-    layout->toggle_notch.enabled = connected;
+    
+    /* Allow controls to be used when disconnected (they set local state,
+       and will be pushed to server on connect) */
+    layout->slider_gain.enabled = true;
+    layout->slider_lna.enabled = true;
+    layout->combo_agc.enabled = true;
+    layout->combo_srate.enabled = !state->streaming;  /* Can't change while streaming */
+    layout->combo_bw.enabled = !state->streaming;     /* Can't change while streaming */
+    layout->combo_antenna.enabled = true;
+    layout->toggle_biast.enabled = true;
+    layout->toggle_notch.enabled = true;
     
     /* Update connect button label */
     layout->btn_connect.label = connected ? "Disconnect" : "Connect";

@@ -101,6 +101,12 @@ int main(int argc, char* argv[])
             }
         }
         
+        /* Debug: Toggle overload with 'O' key for testing */
+        if (app.ui->last_key == SDLK_o) {
+            app.state->overload = !app.state->overload;
+            LOG_INFO("Debug: Overload toggled to %s", app.state->overload ? "ON" : "OFF");
+        }
+        
         /* Draw UI */
         ui_layout_draw(app.layout, app.state);
         
@@ -292,61 +298,70 @@ static void app_handle_actions(app_context_t* app, const ui_actions_t* actions)
                  "Step: %s", app_get_step_string(app->state->tuning_step));
     }
     
-    /* Gain control */
+    /* Gain control - always update local state, send to server if connected */
     if (actions->gain_changed) {
-        if (sdr_set_gain(app->proto, actions->new_gain)) {
-            app->state->gain = actions->new_gain;
+        app->state->gain = actions->new_gain;
+        if (sdr_is_connected(app->proto)) {
+            sdr_set_gain(app->proto, actions->new_gain);
         }
     }
     
     if (actions->lna_changed) {
-        if (sdr_set_lna(app->proto, actions->new_lna)) {
-            app->state->lna = actions->new_lna;
+        app->state->lna = actions->new_lna;
+        if (sdr_is_connected(app->proto)) {
+            sdr_set_lna(app->proto, actions->new_lna);
         }
     }
     
     /* AGC control */
     if (actions->agc_changed) {
-        if (sdr_set_agc(app->proto, actions->new_agc)) {
-            app->state->agc = actions->new_agc;
+        app->state->agc = actions->new_agc;
+        if (sdr_is_connected(app->proto)) {
+            sdr_set_agc(app->proto, actions->new_agc);
         }
     }
     
     /* Sample rate and bandwidth (only when not streaming) */
     if (actions->srate_changed && !app->state->streaming) {
-        if (sdr_set_srate(app->proto, actions->new_srate)) {
-            app->state->sample_rate = actions->new_srate;
+        app->state->sample_rate = actions->new_srate;
+        if (sdr_is_connected(app->proto)) {
+            sdr_set_srate(app->proto, actions->new_srate);
         }
     }
     
     if (actions->bw_changed && !app->state->streaming) {
-        if (sdr_set_bw(app->proto, actions->new_bw)) {
-            app->state->bandwidth = actions->new_bw;
+        app->state->bandwidth = actions->new_bw;
+        if (sdr_is_connected(app->proto)) {
+            sdr_set_bw(app->proto, actions->new_bw);
         }
     }
     
     /* Antenna control */
     if (actions->antenna_changed) {
-        if (sdr_set_antenna(app->proto, actions->new_antenna)) {
-            app->state->antenna = actions->new_antenna;
+        app->state->antenna = actions->new_antenna;
+        LOG_INFO("Antenna changed to %d", actions->new_antenna);
+        if (sdr_is_connected(app->proto)) {
+            sdr_set_antenna(app->proto, actions->new_antenna);
         }
     }
     
     /* Hardware toggles */
     if (actions->biast_changed) {
-        if (sdr_set_biast(app->proto, actions->new_biast)) {
-            app->state->bias_t = actions->new_biast;
-            if (actions->new_biast) {
-                snprintf(app->state->status_message, sizeof(app->state->status_message),
-                         "WARNING: Bias-T enabled - DC voltage on antenna!");
-                LOG_WARN("Bias-T enabled");
-            }
+        app->state->bias_t = actions->new_biast;
+        if (actions->new_biast) {
+            snprintf(app->state->status_message, sizeof(app->state->status_message),
+                     "WARNING: Bias-T enabled - DC voltage on antenna!");
+            LOG_WARN("Bias-T enabled");
+        }
+        if (sdr_is_connected(app->proto)) {
+            sdr_set_biast(app->proto, actions->new_biast);
         }
     }
     
     if (actions->notch_changed) {
-        if (sdr_set_notch(app->proto, actions->new_notch)) {
-            app->state->notch = actions->new_notch;
+        app->state->notch = actions->new_notch;
+        if (sdr_is_connected(app->proto)) {
+            sdr_set_notch(app->proto, actions->new_notch);
         }
     }
 }
@@ -407,10 +422,19 @@ static void app_connect(app_context_t* app)
                      "Connected");
         }
         
-        /* Get initial status */
+        /* Get initial status (only for streaming/overload state) */
         if (sdr_get_status(app->proto)) {
             app_state_update_from_sdr(app->state, &app->proto->status);
         }
+        
+        /* Push our UI settings to the server */
+        sdr_set_freq(app->proto, app->state->frequency);
+        sdr_set_gain(app->proto, app->state->gain);
+        sdr_set_lna(app->proto, app->state->lna);
+        sdr_set_agc(app->proto, app->state->agc);
+        sdr_set_srate(app->proto, app->state->sample_rate);
+        sdr_set_bw(app->proto, app->state->bandwidth);
+        sdr_set_antenna(app->proto, app->state->antenna);
         
         app->state->last_status_update = ui_get_ticks();
         app->state->last_keepalive = ui_get_ticks();

@@ -158,6 +158,9 @@ bool ui_core_begin_frame(ui_core_t* ui, mouse_state_t* mouse)
     ui->last_frame = current_time;
     ui->delta_time = ui->frame_time / 1000.0f;
     
+    /* Reset per-frame state */
+    ui->last_key = 0;
+    
     /* Reset per-frame mouse state */
     if (mouse) {
         mouse->left_clicked = false;
@@ -216,6 +219,11 @@ bool ui_core_begin_frame(ui_core_t* ui, mouse_state_t* mouse)
                 if (mouse) {
                     mouse->wheel_y = event.wheel.y;
                 }
+                break;
+                
+            case SDL_KEYDOWN:
+                /* Store last key for external handling */
+                ui->last_key = event.key.keysym.sym;
                 break;
         }
     }

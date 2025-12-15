@@ -125,7 +125,7 @@ bool widget_slider_update(widget_slider_t* slider, const mouse_state_t* mouse)
     
     int old_value = slider->value;
     
-    /* Start dragging */
+    /* Start dragging - only if click started inside the slider bounds */
     if (in_bounds && mouse->left_clicked) {
         slider->dragging = true;
     }
@@ -135,8 +135,8 @@ bool widget_slider_update(widget_slider_t* slider, const mouse_state_t* mouse)
         slider->dragging = false;
     }
     
-    /* Update value while dragging */
-    if (slider->dragging) {
+    /* Update value while dragging - but only if click originated from this slider */
+    if (slider->dragging && mouse->left_down) {
         float ratio;
         if (slider->vertical) {
             /* Vertical: top = max, bottom = min */
@@ -254,6 +254,7 @@ bool widget_combo_update(widget_combo_t* combo, const mouse_state_t* mouse)
                 int item_idx = (mouse->y - (combo->y + combo->h)) / COMBO_ITEM_HEIGHT;
                 if (item_idx >= 0 && item_idx < combo->item_count) {
                     combo->selected = item_idx;
+                    LOG_INFO("Combo: selected item %d", item_idx);
                 }
             }
             combo->open = false;
@@ -262,12 +263,16 @@ bool widget_combo_update(widget_combo_t* combo, const mouse_state_t* mouse)
         /* Open dropdown on click */
         if (in_header && mouse->left_clicked) {
             combo->open = true;
+            LOG_DEBUG("Combo: opened dropdown");
         }
+    }
+    
+    if (combo->selected != old_selected) {
+        LOG_INFO("Combo: selection changed from %d to %d", old_selected, combo->selected);
     }
     
     return combo->selected != old_selected;
 }
-
 void widget_combo_draw(widget_combo_t* combo, ui_core_t* ui)
 {
     if (!combo || !ui) return;

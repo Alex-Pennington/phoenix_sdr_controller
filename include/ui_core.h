@@ -39,6 +39,7 @@ typedef struct {
     uint32_t frame_time;
     uint32_t last_frame;
     float delta_time;
+    int last_key;        /* Last key pressed (SDL_Keycode, 0 if none) */
 } ui_core_t;
 
 /* Mouse state */

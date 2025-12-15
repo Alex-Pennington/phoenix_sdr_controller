@@ -102,6 +102,11 @@ void app_state_reset(app_state_t* state)
 
 /*
  * Update state from SDR status
+ * 
+ * NOTE: We only update status indicators (streaming, overload) from the server.
+ * User-controlled settings (gain, LNA, freq, etc.) are NOT updated from server
+ * because the UI sliders are the source of truth - we tell the server what
+ * the settings should be, not the other way around.
  */
 void app_state_update_from_sdr(app_state_t* state, const sdr_status_t* sdr_status)
 {
@@ -109,19 +114,12 @@ void app_state_update_from_sdr(app_state_t* state, const sdr_status_t* sdr_statu
         return;
     }
     
-    state->frequency = sdr_status->frequency;
-    state->gain = sdr_status->gain;
-    state->lna = sdr_status->lna;
-    state->agc = sdr_status->agc;
-    state->sample_rate = sdr_status->sample_rate;
-    state->bandwidth = sdr_status->bandwidth;
-    state->antenna = sdr_status->antenna;
-    state->bias_t = sdr_status->bias_t;
-    state->notch = sdr_status->notch;
+    /* Only update status indicators, not user-controlled settings */
     state->streaming = sdr_status->streaming;
     state->overload = sdr_status->overload;
     
-    LOG_DEBUG("App state updated from SDR status");
+    LOG_DEBUG("App state updated from SDR status (streaming=%d, overload=%d)",
+              state->streaming, state->overload);
 }
 
 /*
