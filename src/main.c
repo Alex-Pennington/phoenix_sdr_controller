@@ -379,6 +379,18 @@ static void app_handle_actions(app_context_t* app, const ui_actions_t* actions)
     if (actions->antenna_changed) {
         app->state->antenna = actions->new_antenna;
         LOG_INFO("Antenna changed to %d", actions->new_antenna);
+        
+        /* Hi-Z antenna has reduced LNA states (0-4 vs 0-8 for A/B) */
+        if (actions->new_antenna == ANTENNA_HIZ) {
+            if (app->state->lna > LNA_MAX_HIZ) {
+                app->state->lna = LNA_MAX_HIZ;
+                LOG_INFO("LNA clamped to %d for Hi-Z antenna", LNA_MAX_HIZ);
+                if (sdr_is_connected(app->proto)) {
+                    sdr_set_lna(app->proto, app->state->lna);
+                }
+            }
+        }
+        
         if (sdr_is_connected(app->proto)) {
             sdr_set_antenna(app->proto, actions->new_antenna);
         }

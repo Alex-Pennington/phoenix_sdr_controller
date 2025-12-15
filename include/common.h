@@ -50,7 +50,8 @@
 #define GAIN_MIN 20
 #define GAIN_MAX 59
 #define LNA_MIN 0
-#define LNA_MAX 9
+#define LNA_MAX 8          /* For Antenna A/B */
+#define LNA_MAX_HIZ 4      /* For Hi-Z antenna (reduced LNA states) */
 #define SRATE_MIN 2000000
 #define SRATE_MAX 10000000
 

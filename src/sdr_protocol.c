@@ -891,19 +891,21 @@ bool sdr_process_async(sdr_protocol_t* proto)
                 proto->status.overload = false;
                 LOG_INFO("ADC Overload cleared");
             } else if (strstr(buffer, "GAIN_CHANGE")) {
-                /* Parse: ! GAIN_CHANGE GAIN=x LNA_GR=y 
-                 * Note: LNA_GR is gain reduction in dB from AGC, not the LNA state index.
-                 * We update status.gain but NOT status.lna (which is the user-set state 0-9).
+                /* Parse: ! GAIN_CHANGE GR_ACTUAL=x LNA_GR=y 
+                 * Note: These are actual hardware values (informational only).
+                 * We do NOT update status.gain or status.lna - those reflect what was SET.
+                 * The server now reports SET values in STATUS, not hardware readback.
                  */
-                int gain, lna_gr;
-                if (parse_status_int(buffer, "GAIN", &gain)) {
-                    proto->status.gain = gain;
-                }
-                /* Parse LNA_GR for logging, but don't overwrite lna state */
-                if (parse_status_int(buffer, "LNA_GR", &lna_gr)) {
-                    LOG_INFO("AGC adjusted: GAIN=%d LNA_GR=%d dB", gain, lna_gr);
+                int gr_actual, lna_gr;
+                bool got_gr = parse_status_int(buffer, "GR_ACTUAL", &gr_actual);
+                bool got_lna = parse_status_int(buffer, "LNA_GR", &lna_gr);
+                
+                if (got_gr && got_lna) {
+                    LOG_INFO("AGC hardware: GR_ACTUAL=%d dB, LNA_GR=%d dB", gr_actual, lna_gr);
+                } else if (got_gr) {
+                    LOG_INFO("AGC hardware: GR_ACTUAL=%d dB", gr_actual);
                 } else {
-                    LOG_INFO("AGC adjusted: GAIN=%d", proto->status.gain);
+                    LOG_INFO("AGC notification: %s", buffer);
                 }
             } else if (strstr(buffer, "DISCONNECT")) {
                 LOG_WARN("Server disconnect notification: %s", buffer);

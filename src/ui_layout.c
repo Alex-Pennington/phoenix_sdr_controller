@@ -373,6 +373,13 @@ void ui_layout_sync_state(ui_layout_t* layout, const app_state_t* state)
     layout->slider_gain.value = state->gain;
     layout->slider_lna.value = state->lna;
     
+    /* Update LNA slider max based on antenna (Hi-Z has reduced LNA states) */
+    if (state->antenna == ANTENNA_HIZ) {
+        layout->slider_lna.max_val = LNA_MAX_HIZ;
+    } else {
+        layout->slider_lna.max_val = LNA_MAX;
+    }
+    
     /* Config combos */
     layout->combo_agc.selected = (int)state->agc;
     layout->combo_srate.selected = srate_to_index(state->sample_rate);
