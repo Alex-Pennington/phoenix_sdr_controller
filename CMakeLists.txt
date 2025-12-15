@@ -10,19 +10,33 @@ if(WIN32)
     add_definitions(-DWIN32_LEAN_AND_MEAN)
 endif()
 
-# SDL2 paths (MinGW x86_64)
-set(SDL2_DIR "D:/claude_sandbox/phoenix_sdr/libs/SDL2/SDL2-2.30.9/x86_64-w64-mingw32")
-set(SDL2_TTF_DIR "D:/claude_sandbox/phoenix_sdr/libs/SDL2_ttf/SDL2_ttf-2.22.0/x86_64-w64-mingw32")
+# Try to find SDL2 via find_package (works with vcpkg, system installs, etc.)
+find_package(SDL2 QUIET)
+find_package(SDL2_ttf QUIET)
 
-# SDL2 includes and libraries
-set(SDL2_INCLUDE_DIRS "${SDL2_DIR}/include/SDL2")
-set(SDL2_LIBRARIES "${SDL2_DIR}/lib/libSDL2.dll.a" "${SDL2_DIR}/lib/libSDL2main.a")
-set(SDL2_DLL "${SDL2_DIR}/bin/SDL2.dll")
+if(SDL2_FOUND AND SDL2_ttf_FOUND)
+    # Using vcpkg or system-installed SDL2
+    message(STATUS "Using SDL2 from find_package()")
+    set(USE_VCPKG_SDL2 TRUE)
+else()
+    # Fallback to hardcoded MinGW paths (local development)
+    message(STATUS "SDL2 not found via find_package, using hardcoded MinGW paths")
+    set(USE_VCPKG_SDL2 FALSE)
+    
+    # SDL2 paths (MinGW x86_64)
+    set(SDL2_DIR "D:/claude_sandbox/phoenix_sdr/libs/SDL2/SDL2-2.30.9/x86_64-w64-mingw32")
+    set(SDL2_TTF_DIR "D:/claude_sandbox/phoenix_sdr/libs/SDL2_ttf/SDL2_ttf-2.22.0/x86_64-w64-mingw32")
 
-# SDL2_ttf includes and libraries
-set(SDL2_TTF_INCLUDE_DIRS "${SDL2_TTF_DIR}/include/SDL2")
-set(SDL2_TTF_LIBRARIES "${SDL2_TTF_DIR}/lib/libSDL2_ttf.dll.a")
-set(SDL2_TTF_DLL "${SDL2_TTF_DIR}/bin/SDL2_ttf.dll")
+    # SDL2 includes and libraries
+    set(SDL2_INCLUDE_DIRS "${SDL2_DIR}/include/SDL2")
+    set(SDL2_LIBRARIES "${SDL2_DIR}/lib/libSDL2.dll.a" "${SDL2_DIR}/lib/libSDL2main.a")
+    set(SDL2_DLL "${SDL2_DIR}/bin/SDL2.dll")
+
+    # SDL2_ttf includes and libraries
+    set(SDL2_TTF_INCLUDE_DIRS "${SDL2_TTF_DIR}/include/SDL2")
+    set(SDL2_TTF_LIBRARIES "${SDL2_TTF_DIR}/lib/libSDL2_ttf.dll.a")
+    set(SDL2_TTF_DLL "${SDL2_TTF_DIR}/bin/SDL2_ttf.dll")
+endif()
 
 # Source files
 set(SOURCES
@@ -57,23 +71,39 @@ add_executable(${PROJECT_NAME} WIN32 ${SOURCES} ${HEADERS} ${RESOURCE_FILE})
 
 target_include_directories(${PROJECT_NAME} PRIVATE 
     ${CMAKE_SOURCE_DIR}/include
-    ${SDL2_INCLUDE_DIRS}
-    ${SDL2_TTF_INCLUDE_DIRS}
 )
 
-# Link libraries
-target_link_libraries(${PROJECT_NAME} PRIVATE 
-    ${SDL2_LIBRARIES}
-    ${SDL2_TTF_LIBRARIES}
-)
+if(USE_VCPKG_SDL2)
+    # Link using modern CMake targets from vcpkg
+    target_link_libraries(${PROJECT_NAME} PRIVATE 
+        SDL2::SDL2
+        SDL2::SDL2main
+        SDL2_ttf::SDL2_ttf
+    )
+else()
+    # Link using hardcoded paths
+    target_include_directories(${PROJECT_NAME} PRIVATE 
+        ${SDL2_INCLUDE_DIRS}
+        ${SDL2_TTF_INCLUDE_DIRS}
+    )
+    target_link_libraries(${PROJECT_NAME} PRIVATE 
+        ${SDL2_LIBRARIES}
+        ${SDL2_TTF_LIBRARIES}
+    )
+endif()
 
 # Windows socket library and mingw runtime
 if(WIN32)
-    target_link_libraries(${PROJECT_NAME} PRIVATE ws2_32 mingw32)
+    target_link_libraries(${PROJECT_NAME} PRIVATE ws2_32)
+    if(NOT USE_VCPKG_SDL2)
+        # MinGW runtime only needed for hardcoded MinGW build
+        target_link_libraries(${PROJECT_NAME} PRIVATE mingw32)
+    endif()
 endif()
 
-# Copy SDL2 DLLs to output directory (for Windows)
-if(WIN32)
+# Copy SDL2 DLLs to output directory (for Windows, hardcoded path only)
+# vcpkg handles DLLs automatically via install rules
+if(WIN32 AND NOT USE_VCPKG_SDL2)
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         ${SDL2_DLL}

@@ -26,10 +26,12 @@ jobs:
         uses: actions/checkout@v4
         
       - name: Setup vcpkg
-        run: |
-          git clone https://github.com/microsoft/vcpkg.git
-          .\vcpkg\bootstrap-vcpkg.bat
-          .\vcpkg\vcpkg install sdl2:x64-windows sdl2-ttf:x64-windows
+        uses: lukka/run-vcpkg@v11
+        with:
+          # Use vcpkg.json manifest mode (automatically installs dependencies)
+          runVcpkgInstall: true
+          # Pin to a specific vcpkg commit for reproducibility
+          vcpkgGitCommitId: 'c82f74667287d3dc386bce81e44964370c91a289'
           
       - name: Configure CMake
         run: |
@@ -71,43 +73,62 @@ jobs:
           # Create release directory
           New-Item -ItemType Directory -Path $releaseDir -Force
           
-          # Copy executable
-          Copy-Item "build\phoenix_sdr_controller.exe" $releaseDir\
+          # Copy executable (check both Release subdir and build root)
+          if (Test-Path "build\Release\phoenix_sdr_controller.exe") {
+            Copy-Item "build\Release\phoenix_sdr_controller.exe" $releaseDir\
+          } elseif (Test-Path "build\phoenix_sdr_controller.exe") {
+            Copy-Item "build\phoenix_sdr_controller.exe" $releaseDir\
+          } else {
+            Write-Error "Executable not found!"
+            Get-ChildItem -Recurse build\*.exe
+            exit 1
+          }
           
-          # Copy SDL2 DLLs from vcpkg
-          $vcpkgBin = "vcpkg\installed\x64-windows\bin"
+          # Copy SDL2 DLLs from vcpkg installed directory
+          $vcpkgBin = "${{ github.workspace }}\vcpkg\installed\x64-windows\bin"
           if (Test-Path $vcpkgBin) {
             Copy-Item "$vcpkgBin\SDL2.dll" $releaseDir\ -ErrorAction SilentlyContinue
             Copy-Item "$vcpkgBin\SDL2_ttf.dll" $releaseDir\ -ErrorAction SilentlyContinue
+            # Also copy any other required DLLs (freetype, zlib, etc. for SDL2_ttf)
+            Copy-Item "$vcpkgBin\freetype.dll" $releaseDir\ -ErrorAction SilentlyContinue
+            Copy-Item "$vcpkgBin\zlib1.dll" $releaseDir\ -ErrorAction SilentlyContinue
+            Copy-Item "$vcpkgBin\bz2.dll" $releaseDir\ -ErrorAction SilentlyContinue
+            Copy-Item "$vcpkgBin\brotlicommon.dll" $releaseDir\ -ErrorAction SilentlyContinue
+            Copy-Item "$vcpkgBin\brotlidec.dll" $releaseDir\ -ErrorAction SilentlyContinue
+            Copy-Item "$vcpkgBin\libpng16.dll" $releaseDir\ -ErrorAction SilentlyContinue
           }
           
-          # Also check build directory for DLLs
-          Get-ChildItem "build\*.dll" | Copy-Item -Destination $releaseDir\ -ErrorAction SilentlyContinue
+          # Also check build directory for DLLs (in case CMake copied them)
+          Get-ChildItem "build\*.dll" -ErrorAction SilentlyContinue | Copy-Item -Destination $releaseDir\ -ErrorAction SilentlyContinue
+          Get-ChildItem "build\Release\*.dll" -ErrorAction SilentlyContinue | Copy-Item -Destination $releaseDir\ -ErrorAction SilentlyContinue
           
           # Create README
           @"
-          Phoenix SDR Controller v$version
-          ================================
+Phoenix SDR Controller v$version
+================================
+
+A Windows GUI application for remote control of the Phoenix SDR (SDRplay RSP2 Pro).
+
+Usage:
+1. Extract all files to a folder
+2. Run phoenix_sdr_controller.exe
+3. Connect to your Phoenix SDR server on port 4535
+
+Requirements:
+- Windows 10 or later (64-bit)
+- Phoenix SDR server running on target machine
+
+For more information, see: https://github.com/Alex-Pennington/phoenix_sdr_controller
+"@ | Out-File -FilePath "$releaseDir\README.txt" -Encoding UTF8
           
-          A Windows GUI application for remote control of the Phoenix SDR (SDRplay RSP2 Pro).
-          
-          Usage:
-          1. Extract all files to a folder
-          2. Run phoenix_sdr_controller.exe
-          3. Connect to your Phoenix SDR server on port 4535
-          
-          Requirements:
-          - Windows 10 or later (64-bit)
-          - Phoenix SDR server running on target machine
-          
-          For more information, see: https://github.com/Alex-Pennington/phoenix_sdr_controller
-          "@ | Out-File -FilePath "$releaseDir\README.txt" -Encoding UTF8
+          # List contents for debugging
+          Write-Host "Release package contents:"
+          Get-ChildItem $releaseDir
           
           # Create ZIP
           Compress-Archive -Path $releaseDir -DestinationPath "phoenix_sdr_controller-v$semver-win64.zip"
           
           Write-Host "Created: phoenix_sdr_controller-v$semver-win64.zip"
-          Get-ChildItem $releaseDir
           
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v1
