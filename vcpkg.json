@@ -1,0 +1,8 @@
+{
+  "name": "phoenix-sdr-controller",
+  "version-string": "0.2.0",
+  "dependencies": [
+    "sdl2",
+    "sdl2-ttf"
+  ]
+}
