@@ -8,20 +8,20 @@
 #define VERSION_H
 
 #define VERSION_MAJOR       0
-#define VERSION_MINOR       1
+#define VERSION_MINOR       2
 #define VERSION_PATCH       0
-#define VERSION_BUILD       1
+#define VERSION_BUILD       0
 
 /* Git commit hash (short) */
-#define VERSION_COMMIT      "0000000"
+#define VERSION_COMMIT      "09ba478"
 
 /* Full version string for display */
-#define VERSION_STRING      "0.1.0"
+#define VERSION_STRING      "0.2.0"
 
 /* Full version with build number (for internal/debug use) */
-#define VERSION_FULL        "0.1.0.1"
+#define VERSION_FULL        "0.2.0.0"
 
 /* Version with commit (for detailed info) */
-#define VERSION_DETAILED    "0.1.0.1-0000000"
+#define VERSION_DETAILED    "0.2.0.0-09ba478"
 
 #endif /* VERSION_H */
