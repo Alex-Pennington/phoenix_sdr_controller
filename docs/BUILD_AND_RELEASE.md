@@ -1,222 +1,149 @@
-# Phoenix SDR Controller - Build and Release System
+# Phoenix SDR Controller - Build and Release Guide
 
-## Overview
+This document describes the versioning, build, and release workflow for Phoenix SDR Controller.
 
-This project uses a PowerShell build script (`scripts/build.ps1`) for local development and GitHub Actions for automated releases. The system is designed to keep local version numbers **in sync** with released versions.
+## Version Format
 
----
-
-## Version Scheme
-
-Version format: `MAJOR.MINOR.PATCH.BUILD-COMMIT`
-
-| Component | Purpose | When Incremented |
-|-----------|---------|------------------|
-| **MAJOR** | Breaking changes | Manual (`.\build.ps1 major`) |
-| **MINOR** | New features (backward compatible) | Manual (`.\build.ps1 minor`) |
-| **PATCH** | Bug fixes | Manual (`.\build.ps1 patch`) |
-| **BUILD** | Development builds | Automatic on each `.\build.ps1` |
-| **COMMIT** | Git short hash | Automatic (read from git) |
+```
+MAJOR.MINOR.PATCH+BUILD.COMMIT[-dirty]
+```
 
 **Examples:**
-- `0.1.0` - Release version (displayed to users)
-- `0.1.0.5` - Internal build 5 of version 0.1.0
-- `0.1.0.5-abc1234` - Full version with commit hash
+- `0.3.0+67.abc1234` - Clean build #67 from commit abc1234
+- `0.3.0+67.abc1234-dirty` - Build with uncommitted local changes
+
+| Component | Meaning |
+|-----------|---------|
+| MAJOR | Breaking changes, major features |
+| MINOR | New features, backward compatible |
+| PATCH | Bug fixes |
+| BUILD | Auto-incremented every build |
+| COMMIT | Git short hash (7 chars) |
+| -dirty | Uncommitted changes present |
 
 ---
 
-## Files
+## Local Development
 
-| File | Purpose |
-|------|---------|
-| `include/version.h` | Auto-generated C header with version defines |
-| `scripts/build.ps1` | PowerShell build/version/release script |
-| `.github/workflows/release.yml` | GitHub Actions CD workflow |
+### Building
 
-### version.h Defines
+```powershell
+.\build.ps1                      # Debug build, auto-increments BUILD
+.\build.ps1 -Release             # Optimized build
+.\build.ps1 -Clean               # Delete build/ directory first
+.\build.ps1 -Clean -Release      # Clean rebuild in Release mode
+```
+
+### Incrementing Version
+
+```powershell
+.\build.ps1 -Increment patch     # 0.3.0 → 0.3.1, resets BUILD to 0
+.\build.ps1 -Increment minor     # 0.3.0 → 0.4.0
+.\build.ps1 -Increment major     # 0.3.0 → 1.0.0
+```
+
+### Version File
+
+The version is stored in `include/version.h` and auto-updated by the build script:
 
 ```c
 #define VERSION_MAJOR       0
-#define VERSION_MINOR       1
+#define VERSION_MINOR       3
 #define VERSION_PATCH       0
-#define VERSION_BUILD       5
+#define VERSION_BUILD       67
+
+#define VERSION_STRING      "0.3.0"
+#define VERSION_FULL        "0.3.0+67.abc1234"
 #define VERSION_COMMIT      "abc1234"
-#define VERSION_STRING      "0.1.0"           // For display
-#define VERSION_FULL        "0.1.0.5"         // With build number
-#define VERSION_DETAILED    "0.1.0.5-abc1234" // Full debug info
+#define VERSION_DIRTY       false
 ```
 
 ---
 
-## Build Script Commands
+## Creating a Release
+
+### Prerequisites
+
+1. All changes committed (no dirty state)
+2. Tests passing
+3. On the branch you want to release from
+
+### Release Commands
 
 ```powershell
-cd d:\claude_sandbox\phoenix_sdr_controller
-
-# Build (auto-increments build number)
-.\scripts\build.ps1
-
-# Bump versions (local only, commits to git)
-.\scripts\build.ps1 patch    # 0.1.0 → 0.1.1
-.\scripts\build.ps1 minor    # 0.1.0 → 0.2.0
-.\scripts\build.ps1 major    # 0.1.0 → 1.0.0
-
-# Create release (tags and pushes, triggers GitHub Actions)
-.\scripts\build.ps1 tag
-
-# Clean build directory
-.\scripts\build.ps1 clean
+.\deploy_release.ps1             # Increment BUILD only
+.\deploy_release.ps1 -Patch      # 0.3.0 → 0.3.1 (bug fix release)
+.\deploy_release.ps1 -Minor      # 0.3.0 → 0.4.0 (feature release)
+.\deploy_release.ps1 -Major      # 0.3.0 → 1.0.0 (breaking changes)
+.\deploy_release.ps1 -DryRun     # Preview without pushing
 ```
+
+### What `deploy_release.ps1` Does
+
+1. **Validates** - Checks for uncommitted changes (fails if dirty)
+2. **Updates** - Writes new version to `include/version.h`
+3. **Commits** - Creates commit with message `v0.3.1 build 1`
+4. **Amends** - Re-commits with correct git hash embedded
+5. **Pushes** - Pushes to origin
+6. **Tags** - Creates and pushes tag `v0.3.1+1.abc1234`
+
+The tag push triggers GitHub Actions to build and publish the release.
 
 ---
 
-## Workflows
+## GitHub Actions CI/CD
 
-### Daily Development
+### Release Build (`release.yml`)
 
-```powershell
-# Make code changes...
+**Triggers:**
+- Push of tags matching `v*` (e.g., `v0.3.0+5.abc1234`)
 
-.\scripts\build.ps1           # Build (build number: 0.1.0.1 → 0.1.0.2)
-.\build\phoenix_sdr_controller.exe  # Test
+**Steps:**
+1. Checkout code
+2. Setup vcpkg with SDL2 dependencies
+3. Build with Release configuration
+4. Package release:
+   - `phoenix_sdr_controller.exe`
+   - `SDL2.dll`, `SDL2_ttf.dll`
+   - `README.txt`
+5. Create zip archive
+6. Generate artifact attestation
+7. Create GitHub Release with attached zip
 
-# Make more changes...
-
-.\scripts\build.ps1           # Build again (0.1.0.2 → 0.1.0.3)
-```
-
-The build number increments automatically. This helps track which exact build you're testing.
-
-### Creating a Release
-
-```powershell
-# 1. Bump version (choose one)
-.\scripts\build.ps1 patch     # For bug fixes
-.\scripts\build.ps1 minor     # For new features
-.\scripts\build.ps1 major     # For breaking changes
-
-# This:
-# - Updates version.h (e.g., 0.1.0 → 0.1.1)
-# - Resets build number to 0
-# - Commits the change locally
-
-# 2. (Optional) Build and test locally
-.\scripts\build.ps1
-.\build\phoenix_sdr_controller.exe
-
-# 3. Push the release tag
-.\scripts\build.ps1 tag
-
-# This:
-# - Reads current version from version.h (0.1.1)
-# - Creates annotated git tag (v0.1.1)
-# - Pushes commits and tag to origin
-# - GitHub Actions automatically builds and publishes release
-```
-
-### Key Principle: Version Sync
-
-The `tag` command does **NOT** change the version number. It tags whatever version is currently in `version.h`. This ensures:
-
-1. Your local `version.h` matches the released version
-2. When users report bugs, their version matches your code
-3. No version drift between local and remote
+**Prerelease Detection:**
+Tags containing `-alpha`, `-beta`, or `-rc` are marked as prereleases.
 
 ---
 
-## GitHub Actions Release Workflow
+## Workflow Diagram
 
-When a tag matching `v*` is pushed, the workflow:
-
-1. Checks out the tagged commit
-2. Sets up vcpkg with SDL2 and SDL2_ttf
-3. Builds the Release configuration
-4. Packages executable + DLLs into a ZIP
-5. Generates artifact attestation (provenance)
-6. Creates a GitHub Release with the ZIP attached
-
-### Workflow Triggers
-
-```yaml
-on:
-  push:
-    tags:
-      - 'v*'  # v0.1.0, v1.0.0, etc.
 ```
+Local Development                    GitHub
+─────────────────                    ──────
 
-### Artifact Attestation
-
-The release includes cryptographic attestation proving:
-- The artifact was built by GitHub Actions
-- From this specific repository
-- At this specific commit
-
-Users can verify with:
-```bash
-gh attestation verify phoenix_sdr_controller-v0.1.1-windows-x64.zip \
-  --owner Alex-Pennington
+.\build.ps1                          (no CI on push currently)
+    │
+    ▼
+Build #++ locally
+    │
+git add & commit
+    │
+    ▼
+.\deploy_release.ps1 -Patch
+    │
+    ├── Update version.h
+    ├── Commit "v0.3.1 build 1"
+    ├── Create tag v0.3.1+1.abc1234
+    └── Push tag ─────────────────────► release.yml runs
+                                            │
+                                            ├── Build -Release
+                                            ├── Package zip
+                                            └── Create GitHub Release
+                                                     │
+                                                     ▼
+                                            phoenix_sdr_controller-v0.3.1-win64.zip
+                                            available for download
 ```
-
----
-
-## Version Comparison Examples
-
-| Scenario | Local version.h | Released Tag | In Sync? |
-|----------|-----------------|--------------|----------|
-| Just released v0.1.1 | 0.1.1.0 | v0.1.1 | ✅ Yes |
-| After 3 dev builds | 0.1.1.3 | v0.1.1 | ✅ Yes (same base) |
-| Bumped to 0.1.2 | 0.1.2.0 | v0.1.1 | ✅ Yes (ready to tag) |
-| Wrong: tag incremented | 0.1.1.0 | v0.1.2 | ❌ No (out of sync!) |
-
----
-
-## Error Handling
-
-### `tag` command errors
-
-**"Uncommitted changes detected"**
-```
-ERROR: You have uncommitted changes. Commit or stash them first.
-```
-Fix: Commit or stash your changes before tagging.
-
-**"Tag already exists"**
-```
-ERROR: Tag v0.1.1 already exists!
-```
-Fix: Bump the version first (`.\build.ps1 patch`), then tag.
-
----
-
-## For AI Coding Agents
-
-When working on this project:
-
-1. **Building**: Run `.\scripts\build.ps1` to build. This auto-increments the build number.
-
-2. **Don't manually edit version.h**: It's auto-generated. Use the build script.
-
-3. **Version bumps**: Use `.\scripts\build.ps1 patch/minor/major` to bump versions.
-
-4. **Releases**: The human will run `.\scripts\build.ps1 tag` when ready to release.
-
-5. **Version in code**: Use these constants from `common.h`:
-   ```c
-   APP_VERSION      // "0.1.1" - for display
-   APP_VERSION_FULL // "0.1.1.5-abc1234" - for debug/logs
-   ```
-
----
-
-## Prerequisites
-
-- **CMake** 3.16+
-- **vcpkg** with packages:
-  ```bash
-  vcpkg install sdl2:x64-windows sdl2-ttf:x64-windows
-  ```
-- **Git** (for commit hash and tagging)
-- **PowerShell** 5.1+ (included with Windows)
 
 ---
 
@@ -224,26 +151,29 @@ When working on this project:
 
 | Task | Command |
 |------|---------|
-| Build | `.\scripts\build.ps1` |
-| Build (clean) | `.\scripts\build.ps1 clean; .\scripts\build.ps1` |
-| Bump patch | `.\scripts\build.ps1 patch` |
-| Bump minor | `.\scripts\build.ps1 minor` |
-| Bump major | `.\scripts\build.ps1 major` |
-| Release | `.\scripts\build.ps1 tag` |
-| View current version | `Get-Content include\version.h` |
+| Debug build | `.\build.ps1` |
+| Release build | `.\build.ps1 -Release` |
+| Clean build | `.\build.ps1 -Clean` |
+| Bump patch version | `.\build.ps1 -Increment patch` |
+| Bump minor version | `.\build.ps1 -Increment minor` |
+| Preview release | `.\deploy_release.ps1 -DryRun` |
+| Bug fix release | `.\deploy_release.ps1 -Patch` |
+| Feature release | `.\deploy_release.ps1 -Minor` |
+| Breaking change release | `.\deploy_release.ps1 -Major` |
 
 ---
 
-## Release Checklist
+## Version Verification
 
-- [ ] All changes committed
-- [ ] Tests pass locally
-- [ ] Version bumped appropriately (`patch`/`minor`/`major`)
-- [ ] CHANGELOG updated (if applicable)
-- [ ] Run `.\scripts\build.ps1 tag`
-- [ ] Verify release at GitHub Actions
-- [ ] Download and test release artifact
+After a release, verify the tag and version match:
 
----
+```powershell
+# Check local version
+Get-Content include\version.h | Select-String "VERSION_FULL"
 
-*Last Updated: December 15, 2025*
+# Check git tags
+git tag -l "v*"
+
+# Check remote releases
+gh release list
+```

@@ -40,13 +40,29 @@ jobs:
       - name: Get version from tag
         id: version
         shell: bash
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-        
+        run: |
+          # Tag format: v0.3.0+1.abc1234
+          # Extract just the version part for display
+          TAG="${GITHUB_REF#refs/tags/v}"
+          echo "FULL_VERSION=$TAG" >> $GITHUB_OUTPUT
+          
+          # Extract semantic version (before the +)
+          SEMVER=$(echo "$TAG" | cut -d'+' -f1)
+          echo "SEMVER=$SEMVER" >> $GITHUB_OUTPUT
+          
+          # Detect prerelease (contains -alpha, -beta, -rc)
+          if [[ "$TAG" =~ -alpha|-beta|-rc ]]; then
+            echo "PRERELEASE=true" >> $GITHUB_OUTPUT
+          else
+            echo "PRERELEASE=false" >> $GITHUB_OUTPUT
+          fi
+          
       - name: Prepare release package
         shell: pwsh
         run: |
-          $version = "${{ steps.version.outputs.VERSION }}"
-          $releaseDir = "phoenix_sdr_controller-$version-win64"
+          $version = "${{ steps.version.outputs.FULL_VERSION }}"
+          $semver = "${{ steps.version.outputs.SEMVER }}"
+          $releaseDir = "phoenix_sdr_controller-v$semver-win64"
           
           # Create release directory
           New-Item -ItemType Directory -Path $releaseDir -Force
@@ -84,36 +100,39 @@ jobs:
           "@ | Out-File -FilePath "$releaseDir\README.txt" -Encoding UTF8
           
           # Create ZIP
-          Compress-Archive -Path $releaseDir -DestinationPath "phoenix_sdr_controller-$version-win64.zip"
+          Compress-Archive -Path $releaseDir -DestinationPath "phoenix_sdr_controller-v$semver-win64.zip"
           
-          Write-Host "Created: phoenix_sdr_controller-$version-win64.zip"
+          Write-Host "Created: phoenix_sdr_controller-v$semver-win64.zip"
           Get-ChildItem $releaseDir
           
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v1
         with:
-          subject-path: 'phoenix_sdr_controller-${{ steps.version.outputs.VERSION }}-win64.zip'
+          subject-path: 'phoenix_sdr_controller-v${{ steps.version.outputs.SEMVER }}-win64.zip'
           
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          name: Phoenix SDR Controller v${{ steps.version.outputs.VERSION }}
+          name: Phoenix SDR Controller v${{ steps.version.outputs.SEMVER }}
           body: |
-            ## Phoenix SDR Controller v${{ steps.version.outputs.VERSION }}
+            ## Phoenix SDR Controller v${{ steps.version.outputs.SEMVER }}
+            
+            **Full version:** `${{ steps.version.outputs.FULL_VERSION }}`
             
             Windows GUI application for remote control of the Phoenix SDR.
             
             ### Installation
-            1. Download `phoenix_sdr_controller-${{ steps.version.outputs.VERSION }}-win64.zip`
+            1. Download `phoenix_sdr_controller-v${{ steps.version.outputs.SEMVER }}-win64.zip`
             2. Extract to a folder
             3. Run `phoenix_sdr_controller.exe`
             
             ### Verification
             This release includes artifact attestation. Verify with:
             ```
-            gh attestation verify phoenix_sdr_controller-${{ steps.version.outputs.VERSION }}-win64.zip --owner Alex-Pennington
+            gh attestation verify phoenix_sdr_controller-v${{ steps.version.outputs.SEMVER }}-win64.zip --owner Alex-Pennington
             ```
           files: |
-            phoenix_sdr_controller-${{ steps.version.outputs.VERSION }}-win64.zip
+            phoenix_sdr_controller-v${{ steps.version.outputs.SEMVER }}-win64.zip
           draft: false
-          prerelease: false
+          prerelease: ${{ steps.version.outputs.PRERELEASE }}
+
