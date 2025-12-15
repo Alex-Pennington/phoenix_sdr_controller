@@ -25,7 +25,8 @@ jobs:
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
-          vcpkgGitCommitId: '01f602195983451bc83e72f4214af2cbc495aa94'
+          # Using a recent stable vcpkg commit (Dec 2024)
+          vcpkgGitCommitId: 'c82f74667287d3dc386bce81e44964370c91a289'
           
       - name: Install dependencies
         run: vcpkg install sdl2:x64-windows sdl2-ttf:x64-windows
