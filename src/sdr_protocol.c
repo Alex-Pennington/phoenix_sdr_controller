@@ -891,15 +891,20 @@ bool sdr_process_async(sdr_protocol_t* proto)
                 proto->status.overload = false;
                 LOG_INFO("ADC Overload cleared");
             } else if (strstr(buffer, "GAIN_CHANGE")) {
-                /* Parse: ! GAIN_CHANGE GAIN=x LNA=y */
-                int gain, lna;
+                /* Parse: ! GAIN_CHANGE GAIN=x LNA_GR=y 
+                 * Note: LNA_GR is gain reduction in dB from AGC, not the LNA state index.
+                 * We update status.gain but NOT status.lna (which is the user-set state 0-9).
+                 */
+                int gain, lna_gr;
                 if (parse_status_int(buffer, "GAIN", &gain)) {
                     proto->status.gain = gain;
                 }
-                if (parse_status_int(buffer, "LNA", &lna)) {
-                    proto->status.lna = lna;
+                /* Parse LNA_GR for logging, but don't overwrite lna state */
+                if (parse_status_int(buffer, "LNA_GR", &lna_gr)) {
+                    LOG_INFO("AGC adjusted: GAIN=%d LNA_GR=%d dB", gain, lna_gr);
+                } else {
+                    LOG_INFO("AGC adjusted: GAIN=%d", proto->status.gain);
                 }
-                LOG_INFO("AGC adjusted: GAIN=%d LNA=%d", proto->status.gain, proto->status.lna);
             } else if (strstr(buffer, "DISCONNECT")) {
                 LOG_WARN("Server disconnect notification: %s", buffer);
                 /* Connection will be closed by server */

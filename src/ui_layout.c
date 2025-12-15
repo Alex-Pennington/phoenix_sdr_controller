@@ -202,8 +202,14 @@ void ui_layout_recalculate(ui_layout_t* layout)
     /* Frequency display inside panel */
     layout->freq_display.x = layout->panel_freq.x + 20;
     layout->freq_display.y = layout->panel_freq.y + 34;
-    layout->freq_display.w = layout->panel_freq.w - 40;
+    layout->freq_display.w = layout->panel_freq.w - 50;  /* Leave room for offset dot */
     layout->freq_display.h = 80;
+    
+    /* DC offset dot (next to frequency display) */
+    layout->offset_dot.x = layout->freq_display.x + layout->freq_display.w + 5;
+    layout->offset_dot.y = layout->freq_display.y + (layout->freq_display.h / 2) - 6;
+    layout->offset_dot.w = 12;
+    layout->offset_dot.h = 12;
     
     /* Tuning panel (below frequency) */
     layout->regions.tuning_panel.x = PANEL_PADDING;
@@ -224,6 +230,38 @@ void ui_layout_recalculate(ui_layout_t* layout)
     
     layout->btn_step_up.x = layout->btn_step_down.x + 50;
     layout->btn_step_up.y = tuning_y;
+    
+    /* WWV shortcut buttons (below tuning panel) */
+    int wwv_y = layout->regions.tuning_panel.y + layout->regions.tuning_panel.h + 10;
+    int wwv_x = PANEL_PADDING + 10;
+    int wwv_spacing = 5;
+    
+    layout->btn_wwv_2_5.x = wwv_x;
+    layout->btn_wwv_2_5.y = wwv_y;
+    wwv_x += layout->btn_wwv_2_5.w + wwv_spacing;
+    
+    layout->btn_wwv_5.x = wwv_x;
+    layout->btn_wwv_5.y = wwv_y;
+    wwv_x += layout->btn_wwv_5.w + wwv_spacing;
+    
+    layout->btn_wwv_10.x = wwv_x;
+    layout->btn_wwv_10.y = wwv_y;
+    wwv_x += layout->btn_wwv_10.w + wwv_spacing;
+    
+    layout->btn_wwv_15.x = wwv_x;
+    layout->btn_wwv_15.y = wwv_y;
+    wwv_x += layout->btn_wwv_15.w + wwv_spacing;
+    
+    layout->btn_wwv_20.x = wwv_x;
+    layout->btn_wwv_20.y = wwv_y;
+    wwv_x += layout->btn_wwv_20.w + wwv_spacing;
+    
+    layout->btn_wwv_25.x = wwv_x;
+    layout->btn_wwv_25.y = wwv_y;
+    wwv_x += layout->btn_wwv_25.w + wwv_spacing;
+    
+    layout->btn_wwv_30.x = wwv_x;
+    layout->btn_wwv_30.y = wwv_y;
     
     /* Middle column: Gain (width ~120) */
     int gain_x = left_w + PANEL_PADDING * 2;
@@ -468,6 +506,46 @@ void ui_layout_update(ui_layout_t* layout, const mouse_state_t* mouse,
         actions->notch_changed = true;
         actions->new_notch = layout->toggle_notch.value;
     }
+    
+    /* Check for DC offset dot click */
+    if (mouse->left_clicked) {
+        if (mouse->x >= layout->offset_dot.x && 
+            mouse->x < layout->offset_dot.x + layout->offset_dot.w &&
+            mouse->y >= layout->offset_dot.y && 
+            mouse->y < layout->offset_dot.y + layout->offset_dot.h) {
+            actions->dc_offset_toggled = true;
+        }
+    }
+    
+    /* Update WWV buttons */
+    if (widget_button_update(&layout->btn_wwv_2_5, mouse)) {
+        actions->wwv_clicked = true;
+        actions->wwv_frequency = WWV_2_5_MHZ;
+    }
+    if (widget_button_update(&layout->btn_wwv_5, mouse)) {
+        actions->wwv_clicked = true;
+        actions->wwv_frequency = WWV_5_MHZ;
+    }
+    if (widget_button_update(&layout->btn_wwv_10, mouse)) {
+        actions->wwv_clicked = true;
+        actions->wwv_frequency = WWV_10_MHZ;
+    }
+    if (widget_button_update(&layout->btn_wwv_15, mouse)) {
+        actions->wwv_clicked = true;
+        actions->wwv_frequency = WWV_15_MHZ;
+    }
+    if (widget_button_update(&layout->btn_wwv_20, mouse)) {
+        actions->wwv_clicked = true;
+        actions->wwv_frequency = WWV_20_MHZ;
+    }
+    if (widget_button_update(&layout->btn_wwv_25, mouse)) {
+        actions->wwv_clicked = true;
+        actions->wwv_frequency = WWV_25_MHZ;
+    }
+    if (widget_button_update(&layout->btn_wwv_30, mouse)) {
+        actions->wwv_clicked = true;
+        actions->wwv_frequency = WWV_30_MHZ;
+    }
 }
 
 /*
@@ -488,6 +566,16 @@ void ui_layout_draw(ui_layout_t* layout, const app_state_t* state)
     /* Draw frequency display */
     widget_freq_display_draw(&layout->freq_display, layout->ui);
     
+    /* Draw DC offset indicator dot (next to frequency) */
+    if (state) {
+        uint32_t dot_color = state->dc_offset_enabled ? COLOR_ACCENT : COLOR_TEXT_DIM;
+        ui_draw_rect(layout->ui, layout->offset_dot.x, layout->offset_dot.y,
+                     layout->offset_dot.w, layout->offset_dot.h, dot_color);
+        /* Draw a small border */
+        ui_draw_rect_outline(layout->ui, layout->offset_dot.x, layout->offset_dot.y,
+                             layout->offset_dot.w, layout->offset_dot.h, COLOR_TEXT);
+    }
+    
     /* Draw tuning panel background */
     ui_draw_rect(layout->ui, layout->regions.tuning_panel.x, layout->regions.tuning_panel.y,
                  layout->regions.tuning_panel.w, layout->regions.tuning_panel.h, COLOR_BG_PANEL);
@@ -505,6 +593,15 @@ void ui_layout_draw(ui_layout_t* layout, const app_state_t* state)
     widget_button_draw(&layout->btn_freq_up, layout->ui);
     widget_button_draw(&layout->btn_step_down, layout->ui);
     widget_button_draw(&layout->btn_step_up, layout->ui);
+    
+    /* Draw WWV shortcut buttons */
+    widget_button_draw(&layout->btn_wwv_2_5, layout->ui);
+    widget_button_draw(&layout->btn_wwv_5, layout->ui);
+    widget_button_draw(&layout->btn_wwv_10, layout->ui);
+    widget_button_draw(&layout->btn_wwv_15, layout->ui);
+    widget_button_draw(&layout->btn_wwv_20, layout->ui);
+    widget_button_draw(&layout->btn_wwv_25, layout->ui);
+    widget_button_draw(&layout->btn_wwv_30, layout->ui);
     
     /* Draw gain sliders */
     widget_slider_draw(&layout->slider_gain, layout->ui);

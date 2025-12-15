@@ -264,7 +264,10 @@ static void app_handle_actions(app_context_t* app, const ui_actions_t* actions)
     
     /* Frequency control */
     if (actions->freq_changed) {
-        if (sdr_set_freq(app->proto, actions->new_frequency)) {
+        /* Apply DC offset when sending to server if enabled */
+        int64_t actual_freq = actions->new_frequency + 
+                              (app->state->dc_offset_enabled ? DC_OFFSET_HZ : 0);
+        if (sdr_set_freq(app->proto, actual_freq)) {
             app->state->frequency = actions->new_frequency;
             snprintf(app->state->status_message, sizeof(app->state->status_message),
                      "Frequency: %s", app_format_frequency(actions->new_frequency));
@@ -272,16 +275,20 @@ static void app_handle_actions(app_context_t* app, const ui_actions_t* actions)
     }
     
     if (actions->freq_up) {
-        int64_t new_freq = app->state->frequency + (int64_t)app->state->tuning_step;
-        if (new_freq <= FREQ_MAX && sdr_set_freq(app->proto, new_freq)) {
-            app->state->frequency = new_freq;
+        int64_t new_display_freq = app->state->frequency + (int64_t)app->state->tuning_step;
+        int64_t actual_freq = new_display_freq + 
+                              (app->state->dc_offset_enabled ? DC_OFFSET_HZ : 0);
+        if (new_display_freq <= FREQ_MAX && sdr_set_freq(app->proto, actual_freq)) {
+            app->state->frequency = new_display_freq;
         }
     }
     
     if (actions->freq_down) {
-        int64_t new_freq = app->state->frequency - (int64_t)app->state->tuning_step;
-        if (new_freq >= FREQ_MIN && sdr_set_freq(app->proto, new_freq)) {
-            app->state->frequency = new_freq;
+        int64_t new_display_freq = app->state->frequency - (int64_t)app->state->tuning_step;
+        int64_t actual_freq = new_display_freq + 
+                              (app->state->dc_offset_enabled ? DC_OFFSET_HZ : 0);
+        if (new_display_freq >= FREQ_MIN && sdr_set_freq(app->proto, actual_freq)) {
+            app->state->frequency = new_display_freq;
         }
     }
     
@@ -296,6 +303,38 @@ static void app_handle_actions(app_context_t* app, const ui_actions_t* actions)
         app->state->tuning_step = app_prev_step(app->state->tuning_step);
         snprintf(app->state->status_message, sizeof(app->state->status_message),
                  "Step: %s", app_get_step_string(app->state->tuning_step));
+    }
+    
+    /* DC Offset toggle (local only, doesn't require connection) */
+    if (actions->dc_offset_toggled) {
+        app->state->dc_offset_enabled = !app->state->dc_offset_enabled;
+        snprintf(app->state->status_message, sizeof(app->state->status_message),
+                 "DC Offset: %s (%+d Hz)", 
+                 app->state->dc_offset_enabled ? "ON" : "OFF",
+                 DC_OFFSET_HZ);
+        LOG_INFO("DC Offset toggled: %s", app->state->dc_offset_enabled ? "ON" : "OFF");
+    }
+    
+    /* WWV frequency shortcuts */
+    if (actions->wwv_clicked) {
+        int64_t display_freq = actions->wwv_frequency;
+        /* Apply DC offset when sending to server if enabled */
+        int64_t actual_freq = display_freq + (app->state->dc_offset_enabled ? DC_OFFSET_HZ : 0);
+        
+        if (sdr_is_connected(app->proto)) {
+            if (sdr_set_freq(app->proto, actual_freq)) {
+                app->state->frequency = display_freq;
+                snprintf(app->state->status_message, sizeof(app->state->status_message),
+                         "Tuned to WWV %s", app_format_frequency(display_freq));
+                LOG_INFO("WWV tune: display=%lld Hz, actual=%lld Hz", 
+                         (long long)display_freq, (long long)actual_freq);
+            }
+        } else {
+            /* Not connected - just update local display */
+            app->state->frequency = display_freq;
+            snprintf(app->state->status_message, sizeof(app->state->status_message),
+                     "WWV preset: %s (not connected)", app_format_frequency(display_freq));
+        }
     }
     
     /* Gain control - always update local state, send to server if connected */

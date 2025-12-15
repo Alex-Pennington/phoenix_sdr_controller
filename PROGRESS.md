@@ -218,13 +218,21 @@ src/
 |-----------|-----|-----|------|
 | Frequency | 1,000 | 2,000,000,000 | Hz |
 | Gain Reduction | 20 | 59 | dB |
-| LNA State | 0 | 8 | - |
+| LNA State | 0 | 9 | - |
 | Sample Rate | 2,000,000 | 10,000,000 | Hz |
 | Bandwidth | 200 | 8,000 | kHz |
 
 **Bandwidths:** 200, 300, 600, 1536, 5000, 6000, 7000, 8000 kHz
 **Antennas:** A, B, HIZ
 **AGC Modes:** OFF, 5HZ, 50HZ, 100HZ
+
+---
+
+## Recent Changes
+
+- **LNA State**: Changed max from 8 to 9 (actual hardware supports 0-9, frequency dependent)
+- **DC Offset**: Added +450 Hz DC offset toggle (indicator dot next to frequency display)
+- **WWV Shortcuts**: Added 7 WWV frequency preset buttons (2.5, 5, 10, 15, 20, 25, 30 MHz)
 
 ---
 
