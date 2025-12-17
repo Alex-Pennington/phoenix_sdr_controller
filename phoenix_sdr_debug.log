@@ -1,0 +1,27 @@
+
+=== Session started ===
+[08:21:27][INFO] Phoenix SDR Controller v0.2.1 starting
+
+=== Session started ===
+[08:21:27][INFO] Winsock initialized
+
+=== Session started ===
+[08:21:27][INFO] Loaded presets from phoenix_sdr_presets.ini
+[08:21:27][INFO] Loaded presets from phoenix_sdr_presets.ini
+
+=== Session started ===
+[08:21:27][INFO] UI Core initialized (720x480)
+
+=== Session started ===
+[08:21:27][INFO] UI Layout created
+
+=== Session started ===
+[08:21:27][INFO] Process manager initialized
+[08:21:27][INFO] Loaded process config from phoenix_sdr_presets.ini
+
+=== Session started ===
+[08:21:27][INFO] UDP telemetry receiver created for port 3005
+[08:21:27][INFO] UDP telemetry listening on port 3005
+[08:21:27][INFO] UDP telemetry listening on port 3005
+[08:21:27][INFO] Application initialized successfully
+[08:22:36][INFO] Connecting to 127.0.0.1:4535

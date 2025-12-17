@@ -222,9 +222,6 @@ static bool app_init(app_context_t* app)
  */
 static void app_shutdown(app_context_t* app)
 {
-    /* Save process config before shutdown */
-    process_manager_save_config(&app->proc_mgr, PRESETS_FILENAME);
-    
     /* Shutdown process manager (kills child processes) */
     process_manager_shutdown(&app->proc_mgr);
     
@@ -258,6 +255,9 @@ static void app_shutdown(app_context_t* app)
         app->state = NULL;
     }
     
+    /* Save process config AFTER presets (it appends to the file) */
+    process_manager_save_config(&app->proc_mgr, PRESETS_FILENAME);
+    
     if (app->proto) {
         sdr_protocol_destroy(app->proto);
         app->proto = NULL;
@@ -288,7 +288,58 @@ static void app_handle_actions(app_context_t* app, const ui_actions_t* actions)
         app_disconnect(app);
     }
     
-    /* Only process other actions if connected */
+    /* External process control - works without SDR connection */
+    if (actions->server_toggled) {
+        LOG_INFO("Server button clicked");
+        
+        /* If server is running and we're connected, try graceful shutdown via QUIT first */
+        if (process_manager_is_running(&app->proc_mgr, PROC_SDR_SERVER)) {
+            if (sdr_is_connected(app->proto)) {
+                LOG_INFO("Sending QUIT for graceful server shutdown");
+                sdr_disconnect(app->proto);
+                /* Brief wait for server to process QUIT and exit cleanly */
+                Sleep(200);
+            }
+        }
+        
+        bool running = process_manager_toggle(&app->proc_mgr, PROC_SDR_SERVER);
+        LOG_INFO("Server toggle result: %s", running ? "started" : "stopped");
+        snprintf(app->state->status_message, sizeof(app->state->status_message),
+                 "SDR Server %s", running ? "started" : "stopped");
+    }
+    
+    if (actions->waterfall_toggled) {
+        LOG_INFO("Waterfall button clicked - calling process_manager_toggle");
+        bool running = process_manager_toggle(&app->proc_mgr, PROC_WATERFALL);
+        LOG_INFO("Waterfall toggle result: %s", running ? "started" : "stopped");
+        snprintf(app->state->status_message, sizeof(app->state->status_message),
+                 "Waterfall %s", running ? "started" : "stopped");
+    }
+    
+    /* Tuning step control (local only, doesn't require connection) */
+    if (actions->step_up) {
+        app->state->tuning_step = app_next_step(app->state->tuning_step);
+        snprintf(app->state->status_message, sizeof(app->state->status_message),
+                 "Step: %s", app_get_step_string(app->state->tuning_step));
+    }
+    
+    if (actions->step_down) {
+        app->state->tuning_step = app_prev_step(app->state->tuning_step);
+        snprintf(app->state->status_message, sizeof(app->state->status_message),
+                 "Step: %s", app_get_step_string(app->state->tuning_step));
+    }
+    
+    /* DC Offset toggle (local only, doesn't require connection) */
+    if (actions->dc_offset_toggled) {
+        app->state->dc_offset_enabled = !app->state->dc_offset_enabled;
+        snprintf(app->state->status_message, sizeof(app->state->status_message),
+                 "DC Offset: %s (%+d Hz)", 
+                 app->state->dc_offset_enabled ? "ON" : "OFF",
+                 DC_OFFSET_HZ);
+        LOG_INFO("DC Offset toggled: %s", app->state->dc_offset_enabled ? "ON" : "OFF");
+    }
+    
+    /* Only process SDR-specific actions if connected */
     if (!sdr_is_connected(app->proto)) {
         return;
     }
@@ -349,29 +400,6 @@ static void app_handle_actions(app_context_t* app, const ui_actions_t* actions)
         }
     }
     
-    /* Tuning step control (local only, doesn't send to server) */
-    if (actions->step_up) {
-        app->state->tuning_step = app_next_step(app->state->tuning_step);
-        snprintf(app->state->status_message, sizeof(app->state->status_message),
-                 "Step: %s", app_get_step_string(app->state->tuning_step));
-    }
-    
-    if (actions->step_down) {
-        app->state->tuning_step = app_prev_step(app->state->tuning_step);
-        snprintf(app->state->status_message, sizeof(app->state->status_message),
-                 "Step: %s", app_get_step_string(app->state->tuning_step));
-    }
-    
-    /* DC Offset toggle (local only, doesn't require connection) */
-    if (actions->dc_offset_toggled) {
-        app->state->dc_offset_enabled = !app->state->dc_offset_enabled;
-        snprintf(app->state->status_message, sizeof(app->state->status_message),
-                 "DC Offset: %s (%+d Hz)", 
-                 app->state->dc_offset_enabled ? "ON" : "OFF",
-                 DC_OFFSET_HZ);
-        LOG_INFO("DC Offset toggled: %s", app->state->dc_offset_enabled ? "ON" : "OFF");
-    }
-    
     /* WWV frequency shortcuts */
     if (actions->wwv_clicked) {
         int64_t display_freq = actions->wwv_frequency;
@@ -428,19 +456,6 @@ static void app_handle_actions(app_context_t* app, const ui_actions_t* actions)
                          "M%d is empty (Ctrl+click to save)", slot + 1);
             }
         }
-    }
-    
-    /* External process control */
-    if (actions->server_toggled) {
-        bool running = process_manager_toggle(&app->proc_mgr, PROC_SDR_SERVER);
-        snprintf(app->state->status_message, sizeof(app->state->status_message),
-                 "SDR Server %s", running ? "started" : "stopped");
-    }
-    
-    if (actions->waterfall_toggled) {
-        bool running = process_manager_toggle(&app->proc_mgr, PROC_WATERFALL);
-        snprintf(app->state->status_message, sizeof(app->state->status_message),
-                 "Waterfall %s", running ? "started" : "stopped");
     }
     
     /* Gain control - always update local state, send to server if connected */

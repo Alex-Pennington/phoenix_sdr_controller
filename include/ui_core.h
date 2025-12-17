@@ -35,6 +35,8 @@ typedef struct {
     TTF_Font* font_title;
     int window_width;
     int window_height;
+    int window_x;        /* Window X position */
+    int window_y;        /* Window Y position */
     bool running;
     uint32_t frame_time;
     uint32_t last_frame;

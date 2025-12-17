@@ -9,6 +9,9 @@
 #include <string.h>
 #include <math.h>
 
+/* Window config file */
+#define WINDOW_CONFIG_FILE "phoenix_sdr_window.ini"
+
 /* Font path - will search for a suitable monospace font */
 #ifdef _WIN32
     #define FONT_PATH_PRIMARY "C:/Windows/Fonts/consola.ttf"
@@ -29,6 +32,56 @@ static TTF_Font* load_font(const char* primary, const char* fallback, int size)
         LOG_ERROR("Failed to load font: %s", TTF_GetError());
     }
     return font;
+}
+
+/* Load window position from config file */
+static void load_window_position(int* x, int* y, int* w, int* h)
+{
+    /* Set defaults */
+    *x = 0;
+    *y = 30;  /* Small offset for title bar */
+    *w = WINDOW_WIDTH;
+    *h = WINDOW_HEIGHT;
+    
+    FILE* f = fopen(WINDOW_CONFIG_FILE, "r");
+    if (!f) return;
+    
+    char line[128];
+    while (fgets(line, sizeof(line), f)) {
+        int val;
+        if (sscanf(line, "x=%d", &val) == 1) *x = val;
+        else if (sscanf(line, "y=%d", &val) == 1) *y = val;
+        else if (sscanf(line, "w=%d", &val) == 1) *w = val;
+        else if (sscanf(line, "h=%d", &val) == 1) *h = val;
+    }
+    fclose(f);
+    
+    /* Sanity check - ensure window is at least partially visible */
+    if (*x < -100) *x = 0;
+    if (*y < 0) *y = 30;
+    if (*w < WINDOW_MIN_WIDTH) *w = WINDOW_WIDTH;
+    if (*h < WINDOW_MIN_HEIGHT) *h = WINDOW_HEIGHT;
+    
+    LOG_INFO("Loaded window position: %d,%d size: %dx%d", *x, *y, *w, *h);
+}
+
+/* Save window position to config file */
+static void save_window_position(int x, int y, int w, int h)
+{
+    FILE* f = fopen(WINDOW_CONFIG_FILE, "w");
+    if (!f) {
+        LOG_ERROR("Failed to save window position");
+        return;
+    }
+    
+    fprintf(f, "; Phoenix SDR Controller Window Position\n");
+    fprintf(f, "x=%d\n", x);
+    fprintf(f, "y=%d\n", y);
+    fprintf(f, "w=%d\n", w);
+    fprintf(f, "h=%d\n", h);
+    fclose(f);
+    
+    LOG_INFO("Saved window position: %d,%d size: %dx%d", x, y, w, h);
 }
 
 /*
@@ -58,13 +111,21 @@ ui_core_t* ui_core_init(const char* title)
         return NULL;
     }
     
-    /* Create window */
+    /* Load saved window position */
+    int win_x, win_y, win_w, win_h;
+    load_window_position(&win_x, &win_y, &win_w, &win_h);
+    
+    /* Create window at saved position */
     ui->window = SDL_CreateWindow(
         title ? title : APP_NAME,
-        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        WINDOW_WIDTH, WINDOW_HEIGHT,
+        win_x, win_y,
+        win_w, win_h,
         SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE
     );
+    
+    /* Store initial position */
+    ui->window_x = win_x;
+    ui->window_y = win_y;
     
     if (!ui->window) {
         LOG_ERROR("SDL_CreateWindow failed: %s", SDL_GetError());
@@ -125,6 +186,14 @@ ui_core_t* ui_core_init(const char* title)
 void ui_core_shutdown(ui_core_t* ui)
 {
     if (!ui) return;
+    
+    /* Save window position before closing */
+    if (ui->window) {
+        int x, y, w, h;
+        SDL_GetWindowPosition(ui->window, &x, &y);
+        SDL_GetWindowSize(ui->window, &w, &h);
+        save_window_position(x, y, w, h);
+    }
     
     /* Free fonts */
     if (ui->font_small) TTF_CloseFont(ui->font_small);

@@ -150,13 +150,49 @@ typedef enum {
 #define CLAMP(x, min, max) ((x) < (min) ? (min) : ((x) > (max) ? (max) : (x)))
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
-/* Logging macros */
-#define LOG_INFO(fmt, ...) printf("[INFO] " fmt "\n", ##__VA_ARGS__)
-#define LOG_WARN(fmt, ...) printf("[WARN] " fmt "\n", ##__VA_ARGS__)
-#define LOG_ERROR(fmt, ...) fprintf(stderr, "[ERROR] " fmt "\n", ##__VA_ARGS__)
+/* File-based logging for GUI app */
+#include <stdio.h>
+#include <stdarg.h>
+#include <time.h>
+
+static inline FILE* get_log_file(void) {
+    static FILE* logfile = NULL;
+    static int tried = 0;
+    if (!tried) {
+        tried = 1;
+        logfile = fopen("phoenix_sdr_debug.log", "a");
+        if (logfile) {
+            fprintf(logfile, "\n=== Session started ===\n");
+            fflush(logfile);
+        }
+    }
+    return logfile;
+}
+
+#define LOG_INFO(fmt, ...) do { \
+    FILE* lf = get_log_file(); \
+    if (lf) { fprintf(lf, "[INFO] " fmt "\n", ##__VA_ARGS__); fflush(lf); } \
+    printf("[INFO] " fmt "\n", ##__VA_ARGS__); \
+} while(0)
+
+#define LOG_WARN(fmt, ...) do { \
+    FILE* lf = get_log_file(); \
+    if (lf) { fprintf(lf, "[WARN] " fmt "\n", ##__VA_ARGS__); fflush(lf); } \
+    printf("[WARN] " fmt "\n", ##__VA_ARGS__); \
+} while(0)
+
+#define LOG_ERROR(fmt, ...) do { \
+    FILE* lf = get_log_file(); \
+    if (lf) { fprintf(lf, "[ERROR] " fmt "\n", ##__VA_ARGS__); fflush(lf); } \
+    fprintf(stderr, "[ERROR] " fmt "\n", ##__VA_ARGS__); \
+} while(0)
 
 #ifdef _DEBUG
-    #define LOG_DEBUG(fmt, ...) printf("[DEBUG] " fmt "\n", ##__VA_ARGS__)
+    #define LOG_DEBUG(fmt, ...) do { \
+        FILE* lf = get_log_file(); \
+        if (lf) { fprintf(lf, "[DEBUG] " fmt "\n", ##__VA_ARGS__); fflush(lf); } \
+        printf("[DEBUG] " fmt "\n", ##__VA_ARGS__); \
+    } while(0)
 #else
     #define LOG_DEBUG(fmt, ...)
 #endif

@@ -21,9 +21,14 @@ static bool spawn_process(HANDLE job, child_process_t *child) {
     STARTUPINFO si = {0};
     si.cb = sizeof(si);
     
+    /* Position window at top-left corner */
+    si.dwFlags = STARTF_USEPOSITION;
+    si.dwX = 0;
+    si.dwY = 0;
+    
     /* Hide window if requested */
     if (!child->show_window) {
-        si.dwFlags = STARTF_USESHOWWINDOW;
+        si.dwFlags |= STARTF_USESHOWWINDOW;
         si.wShowWindow = SW_HIDE;
     }
     
@@ -113,10 +118,11 @@ bool process_manager_init(process_manager_t *pm) {
     }
     
     /* Set default configurations */
+    /* SDR Server: -l = log to file, -m = minimized/tray mode */
     process_manager_configure(pm, PROC_SDR_SERVER,
-                              "SDR Server", "sdr_server.exe", NULL, false);
+                              "SDR Server", "D:\\claude_sandbox\\phoenix_sdr\\bin\\sdr_server.exe", "-l -m", false);
     process_manager_configure(pm, PROC_WATERFALL,
-                              "Waterfall", "waterfall.exe", "--tcp localhost:4536", true);
+                              "Waterfall", "D:\\claude_sandbox\\phoenix_sdr\\bin\\waterfall.exe", "--tcp localhost:4536", true);
     
     pm->initialized = true;
     LOG_INFO("Process manager initialized");
@@ -175,10 +181,15 @@ void process_manager_configure(process_manager_t *pm, int index,
 
 bool process_manager_start(process_manager_t *pm, int index) {
     if (!pm || !pm->initialized || index < 0 || index >= PROC_COUNT) {
+        LOG_ERROR("process_manager_start: invalid params pm=%p initialized=%d index=%d", 
+                  (void*)pm, pm ? pm->initialized : 0, index);
         return false;
     }
     
     child_process_t *child = &pm->children[index];
+    
+    LOG_INFO("Attempting to start: %s (path=%s, show_window=%d)", 
+             child->name, child->path, child->show_window);
     
     /* Already running? */
     if (process_manager_is_running(pm, index)) {
@@ -187,12 +198,24 @@ bool process_manager_start(process_manager_t *pm, int index) {
     }
     
     /* Check if executable exists */
-    if (GetFileAttributesA(child->path) == INVALID_FILE_ATTRIBUTES) {
-        LOG_ERROR("Executable not found: %s", child->path);
+    DWORD attrs = GetFileAttributesA(child->path);
+    if (attrs == INVALID_FILE_ATTRIBUTES) {
+        DWORD err = GetLastError();
+        LOG_ERROR("Executable not found: %s (error %lu)", child->path, err);
+        char msg[512];
+        snprintf(msg, sizeof(msg), "Cannot find executable:\n%s\nError: %lu", child->path, err);
+        MessageBoxA(NULL, msg, "Process Start Failed", MB_OK | MB_ICONERROR);
         return false;
     }
     
-    return spawn_process(pm->job, child);
+    LOG_INFO("File exists, spawning process...");
+    bool result = spawn_process(pm->job, child);
+    if (!result) {
+        char msg[512];
+        snprintf(msg, sizeof(msg), "Failed to start:\n%s\nCheck console for details.", child->path);
+        MessageBoxA(NULL, msg, "Process Start Failed", MB_OK | MB_ICONERROR);
+    }
+    return result;
 }
 
 void process_manager_stop(process_manager_t *pm, int index) {
