@@ -13,6 +13,7 @@
 #include "sdr_protocol.h"
 #include "process_manager.h"
 #include "udp_telemetry.h"
+#include "aff.h"
 
 /* Layout regions */
 typedef struct {
@@ -69,6 +70,10 @@ typedef struct {
     /* Toggles */
     widget_toggle_t toggle_biast;
     widget_toggle_t toggle_notch;
+    widget_toggle_t toggle_aff;     /* AFF enable toggle */
+    
+    /* AFF interval slider */
+    widget_slider_t slider_aff_interval;
     
     /* DC offset indicator (clickable dot next to freq display) */
     SDL_Rect offset_dot;
@@ -143,6 +148,10 @@ typedef struct {
     bool preset_save;       /* true = save, false = recall */
     bool server_toggled;    /* Start/Stop SDR Server clicked */
     bool waterfall_toggled; /* Start/Stop Waterfall clicked */
+    bool aff_toggled;       /* AFF enable toggle clicked */
+    bool new_aff;           /* New AFF state */
+    bool aff_interval_changed;  /* AFF interval slider changed */
+    int new_aff_interval;       /* New AFF interval index */
 } ui_actions_t;
 
 /* Create layout */

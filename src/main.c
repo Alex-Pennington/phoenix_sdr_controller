@@ -13,6 +13,7 @@
 #include "ui_layout.h"
 #include "process_manager.h"
 #include "udp_telemetry.h"
+#include "aff.h"
 
 #include <SDL.h>
 
@@ -29,6 +30,7 @@ typedef struct {
     ui_layout_t* layout;
     process_manager_t proc_mgr;
     udp_telemetry_t* telemetry;
+    aff_state_t* aff;
 } app_context_t;
 
 /* Forward declarations */
@@ -118,6 +120,43 @@ int main(int argc, char* argv[])
         if (app.telemetry) {
             udp_telemetry_poll(app.telemetry);
             ui_layout_sync_telemetry(app.layout, app.telemetry);
+            
+            /* Feed SYNC data to AFF when available */
+            if (app.aff && app.telemetry->sync.valid) {
+                bool is_locked = (app.telemetry->sync.state == SYNC_LOCKED);
+                aff_update(app.aff, app.telemetry->sync.delta_ms, 
+                          app.state->frequency, is_locked);
+                
+                /* Check for AFF adjustment */
+                int adjustment_hz = 0;
+                if (aff_get_adjustment(app.aff, &adjustment_hz)) {
+                    int64_t new_freq = app.state->frequency + adjustment_hz;
+                    LOG_INFO("AFF applying adjustment: %+d Hz -> %lld Hz", 
+                             adjustment_hz, (long long)new_freq);
+                    
+                    /* Apply the adjustment */
+                    if (sdr_is_connected(app.proto)) {
+                        if (sdr_set_freq(app.proto, new_freq)) {
+                            app.state->frequency = new_freq;
+                            snprintf(app.state->status_message, 
+                                    sizeof(app.state->status_message),
+                                    "AFF: %+d Hz", adjustment_hz);
+                        }
+                    } else {
+                        /* Not connected - just update local state */
+                        app.state->frequency = new_freq;
+                        snprintf(app.state->status_message, 
+                                sizeof(app.state->status_message),
+                                "AFF: %+d Hz (offline)", adjustment_hz);
+                    }
+                }
+            }
+            
+            /* Sync AFF toggle state to UI */
+            if (app.aff) {
+                app.layout->toggle_aff.value = aff_is_enabled(app.aff);
+                app.layout->slider_aff_interval.value = aff_get_interval(app.aff);
+            }
         }
         
         /* Draw UI */
@@ -214,6 +253,12 @@ static bool app_init(app_context_t* app)
         }
     }
     
+    /* Initialize AFF module */
+    app->aff = aff_create();
+    if (!app->aff) {
+        LOG_WARN("Failed to create AFF module");
+    }
+    
     return true;
 }
 
@@ -224,6 +269,12 @@ static void app_shutdown(app_context_t* app)
 {
     /* Shutdown process manager (kills child processes) */
     process_manager_shutdown(&app->proc_mgr);
+    
+    /* Shutdown AFF module */
+    if (app->aff) {
+        aff_destroy(app->aff);
+        app->aff = NULL;
+    }
     
     /* Shutdown UDP telemetry */
     if (app->telemetry) {
@@ -372,6 +423,9 @@ static void app_handle_actions(app_context_t* app, const ui_actions_t* actions)
     
     /* Frequency control */
     if (actions->freq_changed) {
+        /* Reset AFF when user manually changes frequency */
+        if (app->aff) aff_reset(app->aff);
+        
         /* Apply DC offset when sending to server if enabled */
         int64_t actual_freq = actions->new_frequency + 
                               (app->state->dc_offset_enabled ? DC_OFFSET_HZ : 0);
@@ -383,6 +437,9 @@ static void app_handle_actions(app_context_t* app, const ui_actions_t* actions)
     }
     
     if (actions->freq_up) {
+        /* Reset AFF when user manually changes frequency */
+        if (app->aff) aff_reset(app->aff);
+        
         int64_t new_display_freq = app->state->frequency + (int64_t)app->state->tuning_step;
         int64_t actual_freq = new_display_freq + 
                               (app->state->dc_offset_enabled ? DC_OFFSET_HZ : 0);
@@ -392,6 +449,9 @@ static void app_handle_actions(app_context_t* app, const ui_actions_t* actions)
     }
     
     if (actions->freq_down) {
+        /* Reset AFF when user manually changes frequency */
+        if (app->aff) aff_reset(app->aff);
+        
         int64_t new_display_freq = app->state->frequency - (int64_t)app->state->tuning_step;
         int64_t actual_freq = new_display_freq + 
                               (app->state->dc_offset_enabled ? DC_OFFSET_HZ : 0);
@@ -402,6 +462,9 @@ static void app_handle_actions(app_context_t* app, const ui_actions_t* actions)
     
     /* WWV frequency shortcuts */
     if (actions->wwv_clicked) {
+        /* Reset AFF when user manually changes frequency */
+        if (app->aff) aff_reset(app->aff);
+        
         int64_t display_freq = actions->wwv_frequency;
         /* Apply DC offset when sending to server if enabled */
         int64_t actual_freq = display_freq + (app->state->dc_offset_enabled ? DC_OFFSET_HZ : 0);
@@ -535,6 +598,23 @@ static void app_handle_actions(app_context_t* app, const ui_actions_t* actions)
         if (sdr_is_connected(app->proto)) {
             sdr_set_notch(app->proto, actions->new_notch);
         }
+    }
+    
+    /* AFF controls (local only, doesn't require connection) */
+    if (actions->aff_toggled) {
+        aff_set_enabled(app->aff, actions->new_aff);
+        snprintf(app->state->status_message, sizeof(app->state->status_message),
+                 "AFF: %s", actions->new_aff ? "Enabled" : "Disabled");
+        /* Reset AFF when enabled */
+        if (actions->new_aff) {
+            aff_reset(app->aff);
+        }
+    }
+    
+    if (actions->aff_interval_changed) {
+        aff_set_interval(app->aff, actions->new_aff_interval);
+        snprintf(app->state->status_message, sizeof(app->state->status_message),
+                 "AFF interval: %s", aff_interval_string(actions->new_aff_interval));
     }
 }
 

@@ -116,6 +116,13 @@ ui_layout_t* ui_layout_create(ui_core_t* ui)
     /* Toggles */
     widget_toggle_init(&layout->toggle_biast, 0, 0, "Bias-T");
     widget_toggle_init(&layout->toggle_notch, 0, 0, "FM Notch");
+    widget_toggle_init(&layout->toggle_aff, 0, 0, "AFF");
+    
+    /* AFF interval slider (vertical) */
+    widget_slider_init(&layout->slider_aff_interval, 0, 0, SLIDER_WIDTH, 80,
+                       AFF_INTERVAL_30S, AFF_INTERVAL_120S, true);
+    layout->slider_aff_interval.label = "AFF Int";
+    layout->slider_aff_interval.value = AFF_INTERVAL_60S;
     
     /* WWV frequency shortcut buttons */
     widget_button_init(&layout->btn_wwv_2_5, 0, 0, 50, 24, "2.5");
@@ -424,6 +431,14 @@ void ui_layout_recalculate(ui_layout_t* layout)
     layout->toggle_notch.x = status_x + 8;
     layout->toggle_notch.y = row4_y + 112;
     
+    layout->toggle_aff.x = status_x + 8;
+    layout->toggle_aff.y = row4_y + 142;
+    
+    /* AFF interval slider (right side of config panel) */
+    layout->slider_aff_interval.x = config_x + config_w - 45;
+    layout->slider_aff_interval.y = row4_y + 35;
+    layout->slider_aff_interval.h = col_h - 50;
+    
     /* WWV Stats panel (rightmost column) */
     int wwv_panel_x = status_x + control_w + PANEL_PADDING;
     layout->regions.wwv_panel.x = wwv_panel_x;
@@ -623,6 +638,16 @@ void ui_layout_update(ui_layout_t* layout, const mouse_state_t* mouse,
         actions->new_notch = layout->toggle_notch.value;
     }
     
+    if (widget_toggle_update(&layout->toggle_aff, mouse)) {
+        actions->aff_toggled = true;
+        actions->new_aff = layout->toggle_aff.value;
+    }
+    
+    if (widget_slider_update(&layout->slider_aff_interval, mouse)) {
+        actions->aff_interval_changed = true;
+        actions->new_aff_interval = layout->slider_aff_interval.value;
+    }
+    
     /* Check for DC offset dot click */
     if (mouse->left_clicked) {
         if (mouse->x >= layout->offset_dot.x && 
@@ -770,6 +795,10 @@ void ui_layout_draw(ui_layout_t* layout, const app_state_t* state)
     /* Draw toggles */
     widget_toggle_draw(&layout->toggle_biast, layout->ui);
     widget_toggle_draw(&layout->toggle_notch, layout->ui);
+    widget_toggle_draw(&layout->toggle_aff, layout->ui);
+    
+    /* Draw AFF interval slider */
+    widget_slider_draw(&layout->slider_aff_interval, layout->ui);
     
     /* Draw footer */
     ui_layout_draw_footer(layout, state);
