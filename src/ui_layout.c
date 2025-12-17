@@ -989,18 +989,30 @@ void ui_layout_draw_wwv_panel(ui_layout_t* layout, const udp_telemetry_t* telem)
         uint32_t sync_color;
         switch (telem->sync.state) {
             case SYNC_LOCKED: sync_color = COLOR_GREEN; break;
-            case SYNC_ACQUIRING: sync_color = COLOR_YELLOW; break;
+            case SYNC_TENTATIVE: sync_color = COLOR_ORANGE; break;
+            case SYNC_ACQUIRING:
             default: sync_color = COLOR_TEXT_DIM; break;
         }
         
-        snprintf(buf, sizeof(buf), "Sync: %s", 
-                 udp_telemetry_sync_state_str(telem->sync.state));
+        /* Show state and marker count */
+        snprintf(buf, sizeof(buf), "Sync: %s (%d)", 
+                 udp_telemetry_sync_state_str(telem->sync.state),
+                 telem->sync.marker_num);
         ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, sync_color);
         y += line_h;
         
-        if (telem->sync.state == SYNC_LOCKED) {
-            snprintf(buf, sizeof(buf), "Delta: %+.1f ms", telem->sync.delta_ms);
+        /* Show timing details when we have markers */
+        if (telem->sync.state >= SYNC_TENTATIVE) {
+            snprintf(buf, sizeof(buf), "Delta: %+.1f ms  Int: %.2fs", 
+                     telem->sync.delta_ms, telem->sync.interval_sec);
             ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_TEXT);
+            y += line_h;
+        }
+        
+        /* Show good intervals count when locked */
+        if (telem->sync.state == SYNC_LOCKED && telem->sync.good_intervals > 0) {
+            snprintf(buf, sizeof(buf), "Good: %d intervals", telem->sync.good_intervals);
+            ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_TEXT_DIM);
             y += line_h;
         }
     }

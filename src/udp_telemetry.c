@@ -60,10 +60,10 @@ static bool parse_yes_no(const char* str)
 /* Helper: Parse sync state string */
 static sync_state_t parse_sync_state(const char* str)
 {
-    if (!str) return SYNC_SEARCHING;
+    if (!str) return SYNC_ACQUIRING;
     if (strcmp(str, "LOCKED") == 0) return SYNC_LOCKED;
-    if (strcmp(str, "ACQUIRING") == 0) return SYNC_ACQUIRING;
-    return SYNC_SEARCHING;
+    if (strcmp(str, "TENTATIVE") == 0) return SYNC_TENTATIVE;
+    return SYNC_ACQUIRING;
 }
 
 /*
@@ -439,7 +439,7 @@ telemetry_type_t udp_telemetry_parse(udp_telemetry_t* telem, const char* packet)
         return TELEM_MARKER;
     }
     else if (strcmp(token, "SYNC") == 0) {
-        /* SYNC,time,timestamp_ms,marker_num,state,interval_sec,delta_ms,tick_dur_ms,marker_dur_ms */
+        /* SYNC,time,timestamp_ms,marker_num,state,good_intervals,interval_sec,delta_ms,tick_dur_ms,marker_dur_ms,last_confirmed_ms */
         /* Skip time field */
         token = strtok(NULL, ",");
         if (!token) return TELEM_NONE;
@@ -457,9 +457,14 @@ telemetry_type_t udp_telemetry_parse(udp_telemetry_t* telem, const char* packet)
         if (!token) return TELEM_NONE;
         telem->sync.state = parse_sync_state(token);
         
-        /* interval_sec, delta_ms, tick_dur_ms, marker_dur_ms */
-        float values[4];
-        for (int i = 0; i < 4; i++) {
+        /* good_intervals (int) */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        telem->sync.good_intervals = atoi(token);
+        
+        /* interval_sec, delta_ms, tick_dur_ms, marker_dur_ms, last_confirmed_ms */
+        float values[5];
+        for (int i = 0; i < 5; i++) {
             token = strtok(NULL, ",");
             if (!token) return TELEM_NONE;
             values[i] = (float)atof(token);
@@ -468,6 +473,7 @@ telemetry_type_t udp_telemetry_parse(udp_telemetry_t* telem, const char* packet)
         telem->sync.delta_ms = values[1];
         telem->sync.tick_dur_ms = values[2];
         telem->sync.marker_dur_ms = values[3];
+        telem->sync.last_confirmed_ms = values[4];
         telem->sync.valid = true;
         telem->sync.last_update = now;
         
@@ -537,9 +543,9 @@ const char* udp_telemetry_sync_state_str(sync_state_t state)
 {
     switch (state) {
         case SYNC_LOCKED: return "LOCKED";
-        case SYNC_ACQUIRING: return "ACQUIRING";
-        case SYNC_SEARCHING:
-        default: return "SEARCHING";
+        case SYNC_TENTATIVE: return "TENTATIVE";
+        case SYNC_ACQUIRING:
+        default: return "ACQUIRING";
     }
 }
 

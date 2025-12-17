@@ -99,9 +99,9 @@ typedef struct {
 
 /* Sync state */
 typedef enum {
-    SYNC_SEARCHING = 0,
-    SYNC_ACQUIRING,
-    SYNC_LOCKED
+    SYNC_ACQUIRING = 0, /* Initial state - searching for first marker */
+    SYNC_TENTATIVE,     /* Found 1st marker, need confirmation */
+    SYNC_LOCKED         /* 2+ markers with valid ~60s intervals */
 } sync_state_t;
 
 /* MARK - Minute marker event data */
@@ -120,12 +120,14 @@ typedef struct {
 
 /* SYNC - Synchronization state data */
 typedef struct {
-    int marker_num;         /* Confirmed marker count */
-    sync_state_t state;     /* SEARCHING, ACQUIRING, LOCKED */
-    float interval_sec;     /* Interval between markers (seconds) */
-    float delta_ms;         /* Timing error (ms) from expected */
+    int marker_num;         /* Confirmed marker count (0, 1, 2, ...) */
+    sync_state_t state;     /* ACQUIRING, TENTATIVE, LOCKED */
+    int good_intervals;     /* Count of valid ~60s intervals */
+    float interval_sec;     /* Seconds between last two markers */
+    float delta_ms;         /* Timing error from expected (ms) */
     float tick_dur_ms;      /* Last tick pulse duration (ms) */
     float marker_dur_ms;    /* Last marker pulse duration (ms) */
+    float last_confirmed_ms;/* Timestamp of last confirmed marker (ms since start) */
     bool valid;
     uint32_t last_update;
 } telem_sync_t;
