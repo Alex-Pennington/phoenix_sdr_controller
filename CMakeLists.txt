@@ -48,6 +48,7 @@ set(SOURCES
     src/ui_layout.c
     src/app_state.c
     src/process_manager.c
+    src/udp_telemetry.c
 )
 
 set(HEADERS
@@ -59,6 +60,7 @@ set(HEADERS
     include/app_state.h
     include/common.h
     include/process_manager.h
+    include/udp_telemetry.h
 )
 
 # Windows resource file (icon)

@@ -12,6 +12,7 @@
 #include "app_state.h"
 #include "sdr_protocol.h"
 #include "process_manager.h"
+#include "udp_telemetry.h"
 
 /* Layout regions */
 typedef struct {
@@ -26,6 +27,9 @@ typedef struct {
     SDL_Rect tuning_panel;
     SDL_Rect config_panel;
     SDL_Rect status_panel;
+    
+    /* WWV telemetry panel */
+    SDL_Rect wwv_panel;
     
     /* Footer/status bar */
     SDL_Rect footer;
@@ -94,6 +98,12 @@ typedef struct {
     widget_panel_t panel_freq;
     widget_panel_t panel_gain;
     widget_panel_t panel_config;
+    widget_panel_t panel_wwv;
+    
+    /* WWV telemetry LEDs */
+    widget_led_t led_tone500;
+    widget_led_t led_tone600;
+    widget_led_t led_match;
     
 } ui_layout_t;
 
@@ -162,5 +172,9 @@ void ui_layout_draw_header(ui_layout_t* layout, const app_state_t* state);
 
 /* Draw status bar */
 void ui_layout_draw_footer(ui_layout_t* layout, const app_state_t* state);
+
+/* Sync and draw WWV telemetry panel */
+void ui_layout_sync_telemetry(ui_layout_t* layout, const udp_telemetry_t* telem);
+void ui_layout_draw_wwv_panel(ui_layout_t* layout, const udp_telemetry_t* telem);
 
 #endif /* UI_LAYOUT_H */

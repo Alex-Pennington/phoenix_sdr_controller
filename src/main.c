@@ -12,6 +12,7 @@
 #include "ui_widgets.h"
 #include "ui_layout.h"
 #include "process_manager.h"
+#include "udp_telemetry.h"
 
 #include <SDL.h>
 
@@ -27,6 +28,7 @@ typedef struct {
     ui_core_t* ui;
     ui_layout_t* layout;
     process_manager_t proc_mgr;
+    udp_telemetry_t* telemetry;
 } app_context_t;
 
 /* Forward declarations */
@@ -112,8 +114,19 @@ int main(int argc, char* argv[])
             LOG_INFO("Debug: Overload toggled to %s", app.state->overload ? "ON" : "OFF");
         }
         
+        /* Poll UDP telemetry */
+        if (app.telemetry) {
+            udp_telemetry_poll(app.telemetry);
+            ui_layout_sync_telemetry(app.layout, app.telemetry);
+        }
+        
         /* Draw UI */
         ui_layout_draw(app.layout, app.state);
+        
+        /* Draw WWV telemetry panel (overlays main UI) */
+        if (app.telemetry) {
+            ui_layout_draw_wwv_panel(app.layout, app.telemetry);
+        }
         
         /* End frame - present */
         ui_core_end_frame(app.ui);
@@ -191,6 +204,16 @@ static bool app_init(app_context_t* app)
         process_manager_load_config(&app->proc_mgr, PRESETS_FILENAME);
     }
     
+    /* Initialize UDP telemetry receiver */
+    app->telemetry = udp_telemetry_create(TELEMETRY_UDP_PORT);
+    if (app->telemetry) {
+        if (udp_telemetry_start(app->telemetry)) {
+            LOG_INFO("UDP telemetry listening on port %d", TELEMETRY_UDP_PORT);
+        } else {
+            LOG_WARN("Failed to start UDP telemetry - WWV stats will not be available");
+        }
+    }
+    
     return true;
 }
 
@@ -204,6 +227,12 @@ static void app_shutdown(app_context_t* app)
     
     /* Shutdown process manager (kills child processes) */
     process_manager_shutdown(&app->proc_mgr);
+    
+    /* Shutdown UDP telemetry */
+    if (app->telemetry) {
+        udp_telemetry_destroy(app->telemetry);
+        app->telemetry = NULL;
+    }
     
     /* Disconnect if connected */
     if (app->proto && sdr_is_connected(app->proto)) {

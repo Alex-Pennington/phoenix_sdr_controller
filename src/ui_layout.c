@@ -5,6 +5,7 @@
  */
 
 #include "ui_layout.h"
+#include "udp_telemetry.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -150,6 +151,12 @@ ui_layout_t* ui_layout_create(ui_core_t* ui)
     widget_panel_init(&layout->panel_freq, 0, 0, 0, 0, "Frequency");
     widget_panel_init(&layout->panel_gain, 0, 0, 0, 0, "Gain Control");
     widget_panel_init(&layout->panel_config, 0, 0, 0, 0, "Configuration");
+    widget_panel_init(&layout->panel_wwv, 0, 0, 0, 0, "WWV Stats");
+    
+    /* WWV telemetry indicator LEDs */
+    widget_led_init(&layout->led_tone500, 0, 0, LED_RADIUS, COLOR_GREEN, COLOR_TEXT_DIM, "500Hz");
+    widget_led_init(&layout->led_tone600, 0, 0, LED_RADIUS, COLOR_GREEN, COLOR_TEXT_DIM, "600Hz");
+    widget_led_init(&layout->led_match, 0, 0, LED_RADIUS, COLOR_GREEN, COLOR_RED, "Match");
     
     /* Recalculate to position everything */
     ui_layout_recalculate(layout);
@@ -321,15 +328,16 @@ void ui_layout_recalculate(ui_layout_t* layout)
     layout->btn_waterfall.w = 52;
     layout->btn_waterfall.h = 22;
     
-    /* === ROW 4: Three columns - Gain | Config | Control === */
+    /* === ROW 4: Four columns - Gain | Config | Control | WWV Stats === */
     int row4_y = row3_y + 28;
     int col_h = h - row4_y - FOOTER_HEIGHT - PANEL_PADDING;
     
-    /* Column widths - wider for proper spacing */
+    /* Column widths - adjusted for 4 columns */
     int gain_w = 100;
     int config_w = 150;
-    int control_w = w - gain_w - config_w - PANEL_PADDING * 4;
-    if (control_w < 140) control_w = 140;
+    int control_w = 140;
+    int wwv_w = w - gain_w - config_w - control_w - PANEL_PADDING * 5;
+    if (wwv_w < 180) wwv_w = 180;
     
     /* Gain panel (left column) */
     layout->regions.gain_panel.x = PANEL_PADDING;
@@ -415,6 +423,27 @@ void ui_layout_recalculate(ui_layout_t* layout)
     
     layout->toggle_notch.x = status_x + 8;
     layout->toggle_notch.y = row4_y + 112;
+    
+    /* WWV Stats panel (rightmost column) */
+    int wwv_panel_x = status_x + control_w + PANEL_PADDING;
+    layout->regions.wwv_panel.x = wwv_panel_x;
+    layout->regions.wwv_panel.y = row4_y;
+    layout->regions.wwv_panel.w = wwv_w;
+    layout->regions.wwv_panel.h = col_h;
+    
+    layout->panel_wwv.x = wwv_panel_x;
+    layout->panel_wwv.y = row4_y;
+    layout->panel_wwv.w = wwv_w;
+    layout->panel_wwv.h = col_h;
+    
+    /* WWV indicator LEDs (positioned inside panel) */
+    int wwv_led_y = row4_y + col_h - 30;
+    layout->led_tone500.x = wwv_panel_x + 20;
+    layout->led_tone500.y = wwv_led_y;
+    layout->led_tone600.x = wwv_panel_x + 70;
+    layout->led_tone600.y = wwv_led_y;
+    layout->led_match.x = wwv_panel_x + 120;
+    layout->led_match.y = wwv_led_y;
     
     /* Tuning panel region (not visible, just for event tracking) */
     layout->regions.tuning_panel.x = PANEL_PADDING;
@@ -794,4 +823,117 @@ void ui_layout_draw_footer(ui_layout_t* layout, const app_state_t* state)
                                layout->regions.footer.w - 10, COLOR_GREEN);
         }
     }
+}
+
+/*
+ * Sync WWV telemetry data to LED states
+ */
+void ui_layout_sync_telemetry(ui_layout_t* layout, const udp_telemetry_t* telem)
+{
+    if (!layout) return;
+    
+    if (!telem || !telem->subcarrier.valid) {
+        /* No data - turn off LEDs */
+        layout->led_tone500.on = false;
+        layout->led_tone600.on = false;
+        layout->led_match.on = false;
+        return;
+    }
+    
+    /* Update tone LEDs based on which is detected */
+    layout->led_tone500.on = (telem->subcarrier.detected == SUBCAR_500HZ);
+    layout->led_tone600.on = (telem->subcarrier.detected == SUBCAR_600HZ);
+    layout->led_match.on = telem->subcarrier.match;
+}
+
+/*
+ * Draw WWV telemetry panel
+ */
+void ui_layout_draw_wwv_panel(ui_layout_t* layout, const udp_telemetry_t* telem)
+{
+    if (!layout || !layout->ui) return;
+    
+    /* Draw panel background */
+    widget_panel_draw(&layout->panel_wwv, layout->ui);
+    
+    int x = layout->regions.wwv_panel.x + 8;
+    int y = layout->regions.wwv_panel.y + 22;
+    int line_h = 18;
+    char buf[64];
+    
+    /* Check if we have data */
+    bool has_data = telem && (telem->channel.valid || telem->carrier.valid);
+    
+    if (!has_data) {
+        ui_draw_text(layout->ui, layout->ui->font_small, "No telemetry data", 
+                     x, y, COLOR_TEXT_DIM);
+        ui_draw_text(layout->ui, layout->ui->font_small, "Waiting on UDP 3005...", 
+                     x, y + line_h, COLOR_TEXT_DIM);
+        return;
+    }
+    
+    /* === Channel Quality === */
+    if (telem->channel.valid) {
+        /* Quality indicator with color */
+        uint32_t quality_color;
+        switch (telem->channel.quality) {
+            case QUALITY_GOOD: quality_color = COLOR_GREEN; break;
+            case QUALITY_FAIR: quality_color = COLOR_YELLOW; break;
+            case QUALITY_POOR: quality_color = COLOR_ORANGE; break;
+            default: quality_color = COLOR_RED; break;
+        }
+        
+        snprintf(buf, sizeof(buf), "Quality: %s", 
+                 udp_telemetry_quality_str(telem->channel.quality));
+        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, quality_color);
+        y += line_h;
+        
+        /* SNR */
+        snprintf(buf, sizeof(buf), "SNR: %.1f dB", telem->channel.snr_db);
+        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_TEXT);
+        y += line_h;
+        
+        /* Noise floor */
+        snprintf(buf, sizeof(buf), "Noise: %.1f dB", telem->channel.noise_db);
+        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_TEXT_DIM);
+        y += line_h;
+    }
+    
+    y += 4; /* Gap between sections */
+    
+    /* === Carrier Offset === */
+    if (telem->carrier.valid) {
+        uint32_t offset_color = telem->carrier.measurement_valid ? COLOR_ACCENT : COLOR_TEXT_DIM;
+        
+        snprintf(buf, sizeof(buf), "Offset: %+.2f Hz", telem->carrier.offset_hz);
+        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, offset_color);
+        y += line_h;
+        
+        snprintf(buf, sizeof(buf), "       %+.2f ppm", telem->carrier.offset_ppm);
+        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, offset_color);
+        y += line_h;
+    }
+    
+    y += 4;
+    
+    /* === Subcarrier Status === */
+    if (telem->subcarrier.valid) {
+        snprintf(buf, sizeof(buf), "Min %02d: %s", 
+                 telem->subcarrier.minute,
+                 udp_telemetry_subcarrier_str(telem->subcarrier.expected));
+        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_TEXT);
+        y += line_h;
+        
+        snprintf(buf, sizeof(buf), "Detect: %s %s",
+                 udp_telemetry_subcarrier_str(telem->subcarrier.detected),
+                 telem->subcarrier.match ? "[OK]" : "[MISS]");
+        uint32_t match_color = telem->subcarrier.match ? COLOR_GREEN : COLOR_RED;
+        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, match_color);
+        y += line_h;
+    }
+    
+    /* === Tone LEDs at bottom === */
+    widget_led_draw(&layout->led_tone500, layout->ui);
+    widget_led_draw(&layout->led_tone600, layout->ui);
+    widget_led_draw(&layout->led_match, layout->ui);
 }
