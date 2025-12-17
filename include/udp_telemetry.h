@@ -97,6 +97,39 @@ typedef struct {
     uint32_t last_update;
 } telem_tone_t;
 
+/* Sync state */
+typedef enum {
+    SYNC_SEARCHING = 0,
+    SYNC_ACQUIRING,
+    SYNC_LOCKED
+} sync_state_t;
+
+/* MARK - Minute marker event data */
+typedef struct {
+    char marker_num[8];     /* Marker label (M1, M2, etc.) */
+    int wwv_sec;            /* WWV second position (0-59) */
+    char expected[32];      /* Expected WWV event */
+    float accum_energy;     /* Accumulated energy during marker */
+    float duration_ms;      /* Marker pulse duration (ms) */
+    float since_last_sec;   /* Time since last marker (seconds) */
+    float baseline;         /* Energy baseline level */
+    float threshold;        /* Detection threshold */
+    bool valid;
+    uint32_t last_update;
+} telem_marker_t;
+
+/* SYNC - Synchronization state data */
+typedef struct {
+    int marker_num;         /* Confirmed marker count */
+    sync_state_t state;     /* SEARCHING, ACQUIRING, LOCKED */
+    float interval_sec;     /* Interval between markers (seconds) */
+    float delta_ms;         /* Timing error (ms) from expected */
+    float tick_dur_ms;      /* Last tick pulse duration (ms) */
+    float marker_dur_ms;    /* Last marker pulse duration (ms) */
+    bool valid;
+    uint32_t last_update;
+} telem_sync_t;
+
 /* Complete telemetry state */
 typedef struct {
     telem_channel_t channel;
@@ -104,6 +137,8 @@ typedef struct {
     telem_subcarrier_t subcarrier;
     telem_tone_t tone500;
     telem_tone_t tone600;
+    telem_marker_t marker;
+    telem_sync_t sync;
     
     /* Connection state */
     socket_t socket;
@@ -143,5 +178,42 @@ const char* udp_telemetry_quality_str(signal_quality_t quality);
 
 /* Get subcarrier as string */
 const char* udp_telemetry_subcarrier_str(subcarrier_t sub);
+
+/* Get sync state as string */
+const char* udp_telemetry_sync_state_str(sync_state_t state);
+
+/* WWV/WWVH tone schedule - which tone each station broadcasts at a given minute */
+typedef enum {
+    TONE_NONE = 0,
+    TONE_500HZ,
+    TONE_600HZ,
+    TONE_SPECIAL     /* Voice, alerts, HamSCI test, etc. */
+} wwv_tone_t;
+
+/* Special broadcast types */
+typedef enum {
+    SPECIAL_NONE = 0,
+    SPECIAL_VOICE,           /* Voice announcement */
+    SPECIAL_GEO_ALERT,       /* Geophysical alert (NOAA) */
+    SPECIAL_HAMSCI           /* HamSCI test signal */
+} wwv_special_t;
+
+/* Get the tone WWV broadcasts at a given minute (0-59) */
+wwv_tone_t wwv_get_tone(int minute);
+
+/* Get the tone WWVH broadcasts at a given minute (0-59) */
+wwv_tone_t wwvh_get_tone(int minute);
+
+/* Get special broadcast type for WWV at a given minute */
+wwv_special_t wwv_get_special(int minute);
+
+/* Get special broadcast type for WWVH at a given minute */
+wwv_special_t wwvh_get_special(int minute);
+
+/* Get tone as short string ("500", "600", "---") */
+const char* wwv_tone_str(wwv_tone_t tone);
+
+/* Get special broadcast as string */
+const char* wwv_special_str(wwv_special_t special);
 
 #endif /* UDP_TELEMETRY_H */

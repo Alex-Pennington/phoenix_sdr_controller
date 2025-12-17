@@ -57,6 +57,15 @@ static bool parse_yes_no(const char* str)
     return (strcmp(str, "YES") == 0 || strcmp(str, "1") == 0);
 }
 
+/* Helper: Parse sync state string */
+static sync_state_t parse_sync_state(const char* str)
+{
+    if (!str) return SYNC_SEARCHING;
+    if (strcmp(str, "LOCKED") == 0) return SYNC_LOCKED;
+    if (strcmp(str, "ACQUIRING") == 0) return SYNC_ACQUIRING;
+    return SYNC_SEARCHING;
+}
+
 /*
  * Create telemetry receiver
  */
@@ -386,6 +395,84 @@ telemetry_type_t udp_telemetry_parse(udp_telemetry_t* telem, const char* packet)
         
         return TELEM_TONE600;
     }
+    else if (strcmp(token, "MARK") == 0) {
+        /* MARK,time,timestamp_ms,marker_num,wwv_sec,expected,accum_energy,duration_ms,since_last_sec,baseline,threshold */
+        /* Skip time field */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        /* Skip timestamp_ms field */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        
+        /* marker_num (e.g., "M1", "M2") */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        strncpy(telem->marker.marker_num, token, sizeof(telem->marker.marker_num) - 1);
+        telem->marker.marker_num[sizeof(telem->marker.marker_num) - 1] = '\0';
+        
+        /* wwv_sec */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        telem->marker.wwv_sec = atoi(token);
+        
+        /* expected */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        strncpy(telem->marker.expected, token, sizeof(telem->marker.expected) - 1);
+        telem->marker.expected[sizeof(telem->marker.expected) - 1] = '\0';
+        
+        /* accum_energy, duration_ms, since_last_sec, baseline, threshold */
+        float values[5];
+        for (int i = 0; i < 5; i++) {
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            values[i] = (float)atof(token);
+        }
+        telem->marker.accum_energy = values[0];
+        telem->marker.duration_ms = values[1];
+        telem->marker.since_last_sec = values[2];
+        telem->marker.baseline = values[3];
+        telem->marker.threshold = values[4];
+        telem->marker.valid = true;
+        telem->marker.last_update = now;
+        
+        return TELEM_MARKER;
+    }
+    else if (strcmp(token, "SYNC") == 0) {
+        /* SYNC,time,timestamp_ms,marker_num,state,interval_sec,delta_ms,tick_dur_ms,marker_dur_ms */
+        /* Skip time field */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        /* Skip timestamp_ms field */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        
+        /* marker_num (int) */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        telem->sync.marker_num = atoi(token);
+        
+        /* state */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        telem->sync.state = parse_sync_state(token);
+        
+        /* interval_sec, delta_ms, tick_dur_ms, marker_dur_ms */
+        float values[4];
+        for (int i = 0; i < 4; i++) {
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            values[i] = (float)atof(token);
+        }
+        telem->sync.interval_sec = values[0];
+        telem->sync.delta_ms = values[1];
+        telem->sync.tick_dur_ms = values[2];
+        telem->sync.marker_dur_ms = values[3];
+        telem->sync.valid = true;
+        telem->sync.last_update = now;
+        
+        return TELEM_SYNC;
+    }
     
     return TELEM_NONE;
 }
@@ -440,5 +527,226 @@ const char* udp_telemetry_subcarrier_str(subcarrier_t sub)
         case SUBCAR_600HZ: return "600Hz";
         case SUBCAR_NONE:
         default: return "NONE";
+    }
+}
+
+/*
+ * Get sync state as string
+ */
+const char* udp_telemetry_sync_state_str(sync_state_t state)
+{
+    switch (state) {
+        case SYNC_LOCKED: return "LOCKED";
+        case SYNC_ACQUIRING: return "ACQUIRING";
+        case SYNC_SEARCHING:
+        default: return "SEARCHING";
+    }
+}
+
+/*
+ * WWV tone schedule (0-59 minutes)
+ * 500 Hz: 4, 6, 12, 14, 16, 20, 22, 24, 26, 28, 32, 34, 36, 38, 40, 42, 52, 54, 56, 58
+ * 600 Hz: 1, 3, 5, 7, 11, 13, 15, 17, 19, 21, 23, 25, 27, 31, 33, 35, 37, 39, 41, 53, 55, 57
+ * None:   0, 8-10, 18, 29-30, 43-51, 59
+ */
+static const wwv_tone_t s_wwv_schedule[60] = {
+    TONE_NONE,   /* 0 */
+    TONE_600HZ,  /* 1 */
+    TONE_NONE,   /* 2 */
+    TONE_600HZ,  /* 3 */
+    TONE_500HZ,  /* 4 */
+    TONE_600HZ,  /* 5 */
+    TONE_500HZ,  /* 6 */
+    TONE_600HZ,  /* 7 */
+    TONE_SPECIAL,/* 8 - HamSCI */
+    TONE_NONE,   /* 9 */
+    TONE_NONE,   /* 10 */
+    TONE_600HZ,  /* 11 */
+    TONE_500HZ,  /* 12 */
+    TONE_600HZ,  /* 13 */
+    TONE_500HZ,  /* 14 */
+    TONE_600HZ,  /* 15 */
+    TONE_500HZ,  /* 16 */
+    TONE_600HZ,  /* 17 */
+    TONE_SPECIAL,/* 18 - Geo Alert */
+    TONE_600HZ,  /* 19 */
+    TONE_500HZ,  /* 20 */
+    TONE_600HZ,  /* 21 */
+    TONE_500HZ,  /* 22 */
+    TONE_600HZ,  /* 23 */
+    TONE_500HZ,  /* 24 */
+    TONE_600HZ,  /* 25 */
+    TONE_500HZ,  /* 26 */
+    TONE_600HZ,  /* 27 */
+    TONE_500HZ,  /* 28 */
+    TONE_NONE,   /* 29 */
+    TONE_NONE,   /* 30 */
+    TONE_600HZ,  /* 31 */
+    TONE_500HZ,  /* 32 */
+    TONE_600HZ,  /* 33 */
+    TONE_500HZ,  /* 34 */
+    TONE_600HZ,  /* 35 */
+    TONE_500HZ,  /* 36 */
+    TONE_600HZ,  /* 37 */
+    TONE_500HZ,  /* 38 */
+    TONE_600HZ,  /* 39 */
+    TONE_500HZ,  /* 40 */
+    TONE_600HZ,  /* 41 */
+    TONE_500HZ,  /* 42 */
+    TONE_NONE,   /* 43 */
+    TONE_NONE,   /* 44 */
+    TONE_NONE,   /* 45 */
+    TONE_NONE,   /* 46 */
+    TONE_NONE,   /* 47 */
+    TONE_NONE,   /* 48 */
+    TONE_NONE,   /* 49 */
+    TONE_NONE,   /* 50 */
+    TONE_NONE,   /* 51 */
+    TONE_500HZ,  /* 52 */
+    TONE_600HZ,  /* 53 */
+    TONE_500HZ,  /* 54 */
+    TONE_600HZ,  /* 55 */
+    TONE_500HZ,  /* 56 */
+    TONE_600HZ,  /* 57 */
+    TONE_500HZ,  /* 58 */
+    TONE_NONE    /* 59 */
+};
+
+/*
+ * WWVH tone schedule (0-59 minutes)
+ * 500 Hz: 3, 5, 7, 11, 13, 21, 23, 25, 27, 31, 33, 35, 37, 39, 41, 43-45, 47-51, 53, 55, 57
+ * 600 Hz: 2, 4, 6, 12, 20, 22, 24, 26, 28, 32, 34, 36, 38, 40, 42, 46, 52, 54, 56, 58
+ * None:   0, 8-10, 14-19, 29-30
+ */
+static const wwv_tone_t s_wwvh_schedule[60] = {
+    TONE_NONE,   /* 0 */
+    TONE_NONE,   /* 1 */
+    TONE_600HZ,  /* 2 */
+    TONE_500HZ,  /* 3 */
+    TONE_600HZ,  /* 4 */
+    TONE_500HZ,  /* 5 */
+    TONE_600HZ,  /* 6 */
+    TONE_500HZ,  /* 7 */
+    TONE_NONE,   /* 8 */
+    TONE_NONE,   /* 9 */
+    TONE_NONE,   /* 10 */
+    TONE_500HZ,  /* 11 */
+    TONE_600HZ,  /* 12 */
+    TONE_500HZ,  /* 13 */
+    TONE_NONE,   /* 14 */
+    TONE_NONE,   /* 15 */
+    TONE_NONE,   /* 16 */
+    TONE_NONE,   /* 17 */
+    TONE_NONE,   /* 18 */
+    TONE_NONE,   /* 19 */
+    TONE_600HZ,  /* 20 */
+    TONE_500HZ,  /* 21 */
+    TONE_600HZ,  /* 22 */
+    TONE_500HZ,  /* 23 */
+    TONE_600HZ,  /* 24 */
+    TONE_500HZ,  /* 25 */
+    TONE_600HZ,  /* 26 */
+    TONE_500HZ,  /* 27 */
+    TONE_600HZ,  /* 28 */
+    TONE_NONE,   /* 29 */
+    TONE_NONE,   /* 30 */
+    TONE_500HZ,  /* 31 */
+    TONE_600HZ,  /* 32 */
+    TONE_500HZ,  /* 33 */
+    TONE_600HZ,  /* 34 */
+    TONE_500HZ,  /* 35 */
+    TONE_600HZ,  /* 36 */
+    TONE_500HZ,  /* 37 */
+    TONE_600HZ,  /* 38 */
+    TONE_500HZ,  /* 39 */
+    TONE_600HZ,  /* 40 */
+    TONE_500HZ,  /* 41 */
+    TONE_600HZ,  /* 42 */
+    TONE_500HZ,  /* 43 */
+    TONE_500HZ,  /* 44 */
+    TONE_SPECIAL,/* 45 - Geo Alert */
+    TONE_600HZ,  /* 46 */
+    TONE_500HZ,  /* 47 */
+    TONE_SPECIAL,/* 48 - HamSCI */
+    TONE_500HZ,  /* 49 */
+    TONE_500HZ,  /* 50 */
+    TONE_500HZ,  /* 51 */
+    TONE_600HZ,  /* 52 */
+    TONE_500HZ,  /* 53 */
+    TONE_600HZ,  /* 54 */
+    TONE_500HZ,  /* 55 */
+    TONE_600HZ,  /* 56 */
+    TONE_500HZ,  /* 57 */
+    TONE_600HZ,  /* 58 */
+    TONE_NONE    /* 59 */
+};
+
+/*
+ * Get the tone WWV broadcasts at a given minute
+ */
+wwv_tone_t wwv_get_tone(int minute)
+{
+    if (minute < 0 || minute > 59) return TONE_NONE;
+    return s_wwv_schedule[minute];
+}
+
+/*
+ * Get the tone WWVH broadcasts at a given minute
+ */
+wwv_tone_t wwvh_get_tone(int minute)
+{
+    if (minute < 0 || minute > 59) return TONE_NONE;
+    return s_wwvh_schedule[minute];
+}
+
+/*
+ * Get special broadcast type for WWV at a given minute
+ */
+wwv_special_t wwv_get_special(int minute)
+{
+    switch (minute) {
+        case 8: return SPECIAL_HAMSCI;
+        case 18: return SPECIAL_GEO_ALERT;
+        default: return SPECIAL_NONE;
+    }
+}
+
+/*
+ * Get special broadcast type for WWVH at a given minute
+ */
+wwv_special_t wwvh_get_special(int minute)
+{
+    switch (minute) {
+        case 45: return SPECIAL_GEO_ALERT;
+        case 48: return SPECIAL_HAMSCI;
+        default: return SPECIAL_NONE;
+    }
+}
+
+/*
+ * Get tone as short string
+ */
+const char* wwv_tone_str(wwv_tone_t tone)
+{
+    switch (tone) {
+        case TONE_500HZ: return "500";
+        case TONE_600HZ: return "600";
+        case TONE_SPECIAL: return "SPC";
+        case TONE_NONE:
+        default: return "---";
+    }
+}
+
+/*
+ * Get special broadcast as string
+ */
+const char* wwv_special_str(wwv_special_t special)
+{
+    switch (special) {
+        case SPECIAL_GEO_ALERT: return "GEO";
+        case SPECIAL_HAMSCI: return "HAM";
+        case SPECIAL_VOICE: return "VOX";
+        case SPECIAL_NONE:
+        default: return "";
     }
 }

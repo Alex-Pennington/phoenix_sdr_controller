@@ -916,20 +916,93 @@ void ui_layout_draw_wwv_panel(ui_layout_t* layout, const udp_telemetry_t* telem)
     
     y += 4;
     
-    /* === Subcarrier Status === */
+    /* === Subcarrier Status with WWV/WWVH Schedule === */
     if (telem->subcarrier.valid) {
-        snprintf(buf, sizeof(buf), "Min %02d: %s", 
-                 telem->subcarrier.minute,
-                 udp_telemetry_subcarrier_str(telem->subcarrier.expected));
-        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_TEXT);
+        int minute = telem->subcarrier.minute;
+        
+        /* Get expected tones for each station */
+        wwv_tone_t wwv_tone = wwv_get_tone(minute);
+        wwv_tone_t wwvh_tone = wwvh_get_tone(minute);
+        wwv_special_t wwv_special = wwv_get_special(minute);
+        wwv_special_t wwvh_special = wwvh_get_special(minute);
+        
+        /* Minute header with special broadcast indicator */
+        if (wwv_special != SPECIAL_NONE) {
+            snprintf(buf, sizeof(buf), "Min %02d [WWV %s]", minute, wwv_special_str(wwv_special));
+            ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_ORANGE);
+        } else if (wwvh_special != SPECIAL_NONE) {
+            snprintf(buf, sizeof(buf), "Min %02d [WWVH %s]", minute, wwv_special_str(wwvh_special));
+            ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_ORANGE);
+        } else {
+            snprintf(buf, sizeof(buf), "Min %02d", minute);
+            ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_TEXT);
+        }
         y += line_h;
         
-        snprintf(buf, sizeof(buf), "Detect: %s %s",
-                 udp_telemetry_subcarrier_str(telem->subcarrier.detected),
-                 telem->subcarrier.match ? "[OK]" : "[MISS]");
-        uint32_t match_color = telem->subcarrier.match ? COLOR_GREEN : COLOR_RED;
-        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, match_color);
+        /* Detect header */
+        ui_draw_text(layout->ui, layout->ui->font_small, "Detect:", x, y, COLOR_TEXT_DIM);
         y += line_h;
+        
+        /* 500 Hz line: show detected state and which station broadcasts it */
+        bool tone500_detected = (telem->subcarrier.detected == SUBCAR_500HZ);
+        const char* tone500_status = tone500_detected ? "(on) " : "(off)";
+        uint32_t tone500_color = tone500_detected ? COLOR_GREEN : COLOR_TEXT_DIM;
+        
+        /* Which station(s) broadcast 500 Hz this minute? */
+        const char* tone500_station = "";
+        if (wwv_tone == TONE_500HZ && wwvh_tone == TONE_500HZ) {
+            tone500_station = "WWV+WWVH";
+        } else if (wwv_tone == TONE_500HZ) {
+            tone500_station = "WWV";
+        } else if (wwvh_tone == TONE_500HZ) {
+            tone500_station = "WWVH";
+        }
+        
+        snprintf(buf, sizeof(buf), " 500Hz %s %s", tone500_status, tone500_station);
+        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, tone500_color);
+        y += line_h;
+        
+        /* 600 Hz line: show detected state and which station broadcasts it */
+        bool tone600_detected = (telem->subcarrier.detected == SUBCAR_600HZ);
+        const char* tone600_status = tone600_detected ? "(on) " : "(off)";
+        uint32_t tone600_color = tone600_detected ? COLOR_GREEN : COLOR_TEXT_DIM;
+        
+        /* Which station(s) broadcast 600 Hz this minute? */
+        const char* tone600_station = "";
+        if (wwv_tone == TONE_600HZ && wwvh_tone == TONE_600HZ) {
+            tone600_station = "WWV+WWVH";
+        } else if (wwv_tone == TONE_600HZ) {
+            tone600_station = "WWV";
+        } else if (wwvh_tone == TONE_600HZ) {
+            tone600_station = "WWVH";
+        }
+        
+        snprintf(buf, sizeof(buf), " 600Hz %s %s", tone600_status, tone600_station);
+        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, tone600_color);
+        y += line_h;
+    }
+    
+    y += 4;
+    
+    /* === Sync Status === */
+    if (telem->sync.valid) {
+        uint32_t sync_color;
+        switch (telem->sync.state) {
+            case SYNC_LOCKED: sync_color = COLOR_GREEN; break;
+            case SYNC_ACQUIRING: sync_color = COLOR_YELLOW; break;
+            default: sync_color = COLOR_TEXT_DIM; break;
+        }
+        
+        snprintf(buf, sizeof(buf), "Sync: %s", 
+                 udp_telemetry_sync_state_str(telem->sync.state));
+        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, sync_color);
+        y += line_h;
+        
+        if (telem->sync.state == SYNC_LOCKED) {
+            snprintf(buf, sizeof(buf), "Delta: %+.1f ms", telem->sync.delta_ms);
+            ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_TEXT);
+            y += line_h;
+        }
     }
     
     /* === Tone LEDs at bottom === */
