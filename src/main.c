@@ -14,6 +14,7 @@
 #include "process_manager.h"
 #include "udp_telemetry.h"
 #include "aff.h"
+#include "bdc/bcd_decoder.h"
 
 #include <SDL.h>
 
@@ -31,6 +32,8 @@ typedef struct {
     process_manager_t proc_mgr;
     udp_telemetry_t* telemetry;
     aff_state_t* aff;
+    bcd_decoder_t* bcd_decoder;
+    uint32_t last_bcd_update;  /* Track last processed BCD1 timestamp */
 } app_context_t;
 
 /* Forward declarations */
@@ -121,6 +124,41 @@ int main(int argc, char* argv[])
             udp_telemetry_poll(app.telemetry);
             ui_layout_sync_telemetry(app.layout, app.telemetry);
             
+            /* Feed BCD1 data to decoder when NEW data arrives */
+            if (app.bcd_decoder && app.telemetry->bcd100.valid &&
+                app.telemetry->bcd100.last_update != app.last_bcd_update) {
+                
+                /* Debug: log first BCD1 packet */
+                static bool first_bcd = true;
+                if (first_bcd) {
+                    LOG_INFO("First BCD1 packet: env=%.2f snr=%.1f status=%s",
+                             app.telemetry->bcd100.envelope,
+                             app.telemetry->bcd100.snr_db,
+                             app.telemetry->bcd100.status);
+                    first_bcd = false;
+                }
+                
+                app.last_bcd_update = app.telemetry->bcd100.last_update;
+                
+                /* Convert status string to enum */
+                bcd_status_t status = BCD_STATUS_ABSENT;
+                const char* status_str = app.telemetry->bcd100.status;
+                if (strcmp(status_str, "WEAK") == 0) {
+                    status = BCD_STATUS_WEAK;
+                } else if (strcmp(status_str, "PRESENT") == 0) {
+                    status = BCD_STATUS_PRESENT;
+                } else if (strcmp(status_str, "STRONG") == 0) {
+                    status = BCD_STATUS_STRONG;
+                }
+                
+                /* Feed sample to decoder */
+                bcd_decoder_process_sample(app.bcd_decoder,
+                    (float)app.telemetry->bcd100.last_update,
+                    app.telemetry->bcd100.envelope,
+                    app.telemetry->bcd100.snr_db,
+                    status);
+            }
+            
             /* Feed SYNC data to AFF when available */
             if (app.aff && app.telemetry->sync.valid) {
                 bool is_locked = (app.telemetry->sync.state == SYNC_LOCKED);
@@ -165,6 +203,12 @@ int main(int argc, char* argv[])
         /* Draw WWV telemetry panel (overlays main UI) */
         if (app.telemetry) {
             ui_layout_draw_wwv_panel(app.layout, app.telemetry);
+        }
+        
+        /* Draw BCD time code panel */
+        if (app.bcd_decoder) {
+            ui_layout_sync_bcd(app.layout, app.bcd_decoder);
+            ui_layout_draw_bcd_panel(app.layout, app.bcd_decoder);
         }
         
         /* End frame - present */
@@ -259,6 +303,12 @@ static bool app_init(app_context_t* app)
         LOG_WARN("Failed to create AFF module");
     }
     
+    /* Initialize BCD decoder */
+    app->bcd_decoder = bcd_decoder_create();
+    if (!app->bcd_decoder) {
+        LOG_WARN("Failed to create BCD decoder");
+    }
+    
     return true;
 }
 
@@ -274,6 +324,12 @@ static void app_shutdown(app_context_t* app)
     if (app->aff) {
         aff_destroy(app->aff);
         app->aff = NULL;
+    }
+    
+    /* Shutdown BCD decoder */
+    if (app->bcd_decoder) {
+        bcd_decoder_destroy(app->bcd_decoder);
+        app->bcd_decoder = NULL;
     }
     
     /* Shutdown UDP telemetry */

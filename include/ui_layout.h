@@ -14,6 +14,7 @@
 #include "process_manager.h"
 #include "udp_telemetry.h"
 #include "aff.h"
+#include "../src/bdc/bcd_decoder.h"
 
 /* Layout regions */
 typedef struct {
@@ -31,6 +32,9 @@ typedef struct {
     
     /* WWV telemetry panel */
     SDL_Rect wwv_panel;
+    
+    /* BCD time code panel */
+    SDL_Rect bcd_panel;
     
     /* Footer/status bar */
     SDL_Rect footer;
@@ -110,6 +114,10 @@ typedef struct {
     widget_led_t led_tone600;
     widget_led_t led_match;
     
+    /* BCD time code panel */
+    widget_panel_t panel_bcd;
+    widget_led_t led_bcd_sync;
+    
 } ui_layout_t;
 
 /* Action results from UI update */
@@ -185,5 +193,9 @@ void ui_layout_draw_footer(ui_layout_t* layout, const app_state_t* state);
 /* Sync and draw WWV telemetry panel */
 void ui_layout_sync_telemetry(ui_layout_t* layout, const udp_telemetry_t* telem);
 void ui_layout_draw_wwv_panel(ui_layout_t* layout, const udp_telemetry_t* telem);
+
+/* Sync and draw BCD time code panel */
+void ui_layout_sync_bcd(ui_layout_t* layout, const bcd_decoder_t* bcd);
+void ui_layout_draw_bcd_panel(ui_layout_t* layout, const bcd_decoder_t* bcd);
 
 #endif /* UI_LAYOUT_H */

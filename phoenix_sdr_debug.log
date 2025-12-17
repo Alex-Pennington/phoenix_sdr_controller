@@ -25,3 +25,165 @@
 [08:21:27][INFO] UDP telemetry listening on port 3005
 [08:21:27][INFO] Application initialized successfully
 [08:22:36][INFO] Connecting to 127.0.0.1:4535
+
+=== Session started ===
+[INFO] Phoenix SDR Controller v0.2.1 starting
+
+=== Session started ===
+[INFO] Winsock initialized
+
+=== Session started ===
+[INFO] Loaded presets from phoenix_sdr_presets.ini
+[INFO] Loaded presets from phoenix_sdr_presets.ini
+
+=== Session started ===
+[INFO] UI Core initialized (720x480)
+
+=== Session started ===
+[INFO] UI Layout created
+
+=== Session started ===
+[INFO] Process manager initialized
+[INFO] Loaded process config from phoenix_sdr_presets.ini
+
+=== Session started ===
+[INFO] UDP telemetry receiver created for port 3005
+[INFO] UDP telemetry listening on port 3005
+[INFO] UDP telemetry listening on port 3005
+
+=== Session started ===
+[INFO] AFF module created
+[INFO] Application initialized successfully
+[INFO] Main loop ended
+[INFO] Process manager shutting down...
+[INFO] Process manager shutdown complete
+[INFO] AFF module destroyed
+[INFO] UDP telemetry stopped
+[INFO] UDP telemetry receiver destroyed
+[INFO] UI Layout destroyed
+[INFO] Saved window position: 0,31 size: 720x920
+[INFO] UI Core shutdown
+[INFO] Saved presets to phoenix_sdr_presets.ini
+[INFO] Saved process config to phoenix_sdr_presets.ini
+[INFO] Winsock cleaned up
+[INFO] Phoenix SDR Controller exiting
+
+=== Session started ===
+[INFO] Phoenix SDR Controller v0.3.0 starting
+
+=== Session started ===
+[INFO] Winsock initialized
+
+=== Session started ===
+[INFO] Loaded presets from phoenix_sdr_presets.ini
+[INFO] Loaded presets from phoenix_sdr_presets.ini
+
+=== Session started ===
+[INFO] Loaded window position: 0,31 size: 720x920
+[INFO] UI Core initialized (720x480)
+
+=== Session started ===
+[INFO] UI Layout created
+
+=== Session started ===
+[INFO] Process manager initialized
+[INFO] Loaded process config from phoenix_sdr_presets.ini
+
+=== Session started ===
+[INFO] UDP telemetry receiver created for port 3005
+[INFO] UDP telemetry listening on port 3005
+[INFO] UDP telemetry listening on port 3005
+
+=== Session started ===
+[INFO] AFF module created
+[INFO] Application initialized successfully
+[INFO] Server button clicked
+[INFO] Attempting to start: SDR Server (path=D:\claude_sandbox\phoenix_sdr\bin\sdr_server.exe, show_window=0)
+[INFO] File exists, spawning process...
+[INFO] Started: SDR Server (PID 3084)
+[INFO] Server toggle result: started
+[INFO] Connecting to 127.0.0.1:4535
+[INFO] Connected to 127.0.0.1:4535
+
+=== Session started ===
+[INFO] SDR Version: 1.2.0+40.0a7f527-dirty, Protocol: 1.0, API: 
+[INFO] Connected to 127.0.0.1:4535
+
+=== Session started ===
+[INFO] Combo: selected item 2
+[INFO] Combo: selection changed from 0 to 2
+[INFO] Antenna changed to 2
+[INFO] Waterfall button clicked - calling process_manager_toggle
+[INFO] Attempting to start: Waterfall (path=D:\claude_sandbox\phoenix_sdr\bin\waterfall.exe, show_window=1)
+[INFO] File exists, spawning process...
+[INFO] Started: Waterfall (PID 16900)
+[INFO] Waterfall toggle result: started
+[INFO] Streaming started
+[INFO] First BCD1 packet: env=0.00 snr=-48.5 status=ABSENT
+[INFO] Waterfall exited with code 0
+[INFO] Waterfall button clicked - calling process_manager_toggle
+[INFO] Attempting to start: Waterfall (path=D:\claude_sandbox\phoenix_sdr\bin\waterfall.exe, show_window=1)
+[INFO] File exists, spawning process...
+[INFO] Started: Waterfall (PID 3096)
+[INFO] Waterfall toggle result: started
+[INFO] WWV tune: display=10000000 Hz, actual=10000000 Hz
+[INFO] Main loop ended
+[INFO] Process manager shutting down...
+[INFO] Stopping: SDR Server (PID 3084)
+[INFO] Stopping: Waterfall (PID 3096)
+[INFO] Process manager shutdown complete
+[INFO] AFF module destroyed
+[INFO] UDP telemetry stopped
+[INFO] UDP telemetry receiver destroyed
+[ERROR] send() failed: 10054
+[INFO] Disconnected from 127.0.0.1:4535
+[INFO] UI Layout destroyed
+[INFO] Saved window position: 0,31 size: 720x973
+[INFO] UI Core shutdown
+[INFO] Saved presets to phoenix_sdr_presets.ini
+[INFO] Saved process config to phoenix_sdr_presets.ini
+[INFO] Winsock cleaned up
+[INFO] Phoenix SDR Controller exiting
+
+=== Session started ===
+[INFO] Phoenix SDR Controller v0.3.0 starting
+
+=== Session started ===
+[INFO] Winsock initialized
+
+=== Session started ===
+[INFO] Loaded presets from phoenix_sdr_presets.ini
+[INFO] Loaded presets from phoenix_sdr_presets.ini
+
+=== Session started ===
+[INFO] Loaded window position: 0,31 size: 720x973
+[INFO] UI Core initialized (720x480)
+
+=== Session started ===
+[INFO] UI Layout created
+
+=== Session started ===
+[INFO] Process manager initialized
+[INFO] Loaded process config from phoenix_sdr_presets.ini
+
+=== Session started ===
+[INFO] UDP telemetry receiver created for port 3005
+[INFO] UDP telemetry listening on port 3005
+[INFO] UDP telemetry listening on port 3005
+
+=== Session started ===
+[INFO] AFF module created
+[INFO] Application initialized successfully
+[INFO] Main loop ended
+[INFO] Process manager shutting down...
+[INFO] Process manager shutdown complete
+[INFO] AFF module destroyed
+[INFO] UDP telemetry stopped
+[INFO] UDP telemetry receiver destroyed
+[INFO] UI Layout destroyed
+[INFO] Saved window position: 0,31 size: 720x973
+[INFO] UI Core shutdown
+[INFO] Saved presets to phoenix_sdr_presets.ini
+[INFO] Saved process config to phoenix_sdr_presets.ini
+[INFO] Winsock cleaned up
+[INFO] Phoenix SDR Controller exiting

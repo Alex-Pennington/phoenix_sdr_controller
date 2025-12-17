@@ -6,6 +6,7 @@
 
 #include "ui_layout.h"
 #include "udp_telemetry.h"
+#include "../src/bdc/bcd_decoder.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -164,6 +165,10 @@ ui_layout_t* ui_layout_create(ui_core_t* ui)
     widget_led_init(&layout->led_tone500, 0, 0, LED_RADIUS, COLOR_GREEN, COLOR_TEXT_DIM, "500Hz");
     widget_led_init(&layout->led_tone600, 0, 0, LED_RADIUS, COLOR_GREEN, COLOR_TEXT_DIM, "600Hz");
     widget_led_init(&layout->led_match, 0, 0, LED_RADIUS, COLOR_GREEN, COLOR_RED, "Match");
+    
+    /* BCD time code panel */
+    widget_panel_init(&layout->panel_bcd, 0, 0, 0, 0, "BCD Time");
+    widget_led_init(&layout->led_bcd_sync, 0, 0, LED_RADIUS, COLOR_GREEN, COLOR_TEXT_DIM, "Sync");
     
     /* Recalculate to position everything */
     ui_layout_recalculate(layout);
@@ -439,26 +444,44 @@ void ui_layout_recalculate(ui_layout_t* layout)
     layout->slider_aff_interval.y = row4_y + 35;
     layout->slider_aff_interval.h = col_h - 50;
     
-    /* WWV Stats panel (rightmost column) */
+    /* WWV Stats panel (rightmost column - top half) */
     int wwv_panel_x = status_x + control_w + PANEL_PADDING;
+    int wwv_h = (col_h - PANEL_PADDING) / 2;  /* Split column in half */
     layout->regions.wwv_panel.x = wwv_panel_x;
     layout->regions.wwv_panel.y = row4_y;
     layout->regions.wwv_panel.w = wwv_w;
-    layout->regions.wwv_panel.h = col_h;
+    layout->regions.wwv_panel.h = wwv_h;
     
     layout->panel_wwv.x = wwv_panel_x;
     layout->panel_wwv.y = row4_y;
     layout->panel_wwv.w = wwv_w;
-    layout->panel_wwv.h = col_h;
+    layout->panel_wwv.h = wwv_h;
     
     /* WWV indicator LEDs (positioned inside panel) */
-    int wwv_led_y = row4_y + col_h - 30;
+    int wwv_led_y = row4_y + wwv_h - 30;
     layout->led_tone500.x = wwv_panel_x + 20;
     layout->led_tone500.y = wwv_led_y;
     layout->led_tone600.x = wwv_panel_x + 70;
     layout->led_tone600.y = wwv_led_y;
     layout->led_match.x = wwv_panel_x + 120;
     layout->led_match.y = wwv_led_y;
+    
+    /* BCD Time panel (rightmost column - bottom half) */
+    int bcd_panel_y = row4_y + wwv_h + PANEL_PADDING;
+    int bcd_h = col_h - wwv_h - PANEL_PADDING;
+    layout->regions.bcd_panel.x = wwv_panel_x;
+    layout->regions.bcd_panel.y = bcd_panel_y;
+    layout->regions.bcd_panel.w = wwv_w;
+    layout->regions.bcd_panel.h = bcd_h;
+    
+    layout->panel_bcd.x = wwv_panel_x;
+    layout->panel_bcd.y = bcd_panel_y;
+    layout->panel_bcd.w = wwv_w;
+    layout->panel_bcd.h = bcd_h;
+    
+    /* BCD sync LED (inside panel) */
+    layout->led_bcd_sync.x = wwv_panel_x + 20;
+    layout->led_bcd_sync.y = bcd_panel_y + bcd_h - 30;
     
     /* Tuning panel region (not visible, just for event tracking) */
     layout->regions.tuning_panel.x = PANEL_PADDING;
@@ -1050,4 +1073,200 @@ void ui_layout_draw_wwv_panel(ui_layout_t* layout, const udp_telemetry_t* telem)
     widget_led_draw(&layout->led_tone500, layout->ui);
     widget_led_draw(&layout->led_tone600, layout->ui);
     widget_led_draw(&layout->led_match, layout->ui);
+}
+
+/*
+ * Sync BCD decoder state to LED
+ */
+void ui_layout_sync_bcd(ui_layout_t* layout, const bcd_decoder_t* bcd)
+{
+    if (!layout) return;
+    
+    if (!bcd) {
+        layout->led_bcd_sync.on = false;
+        return;
+    }
+    
+    /* LED on when locked */
+    bcd_sync_state_t state = bcd_decoder_get_sync_state((bcd_decoder_t*)bcd);
+    layout->led_bcd_sync.on = (state == BCD_SYNC_LOCKED);
+}
+
+/*
+ * Draw BCD time code panel
+ */
+void ui_layout_draw_bcd_panel(ui_layout_t* layout, const bcd_decoder_t* bcd)
+{
+    if (!layout || !layout->ui) return;
+    
+    /* Draw panel background */
+    widget_panel_draw(&layout->panel_bcd, layout->ui);
+    
+    int x = layout->regions.bcd_panel.x + 8;
+    int y = layout->regions.bcd_panel.y + 22;
+    int panel_w = layout->regions.bcd_panel.w - 16;
+    int line_h = 16;
+    char buf[64];
+    
+    /* Check if we have a decoder */
+    if (!bcd) {
+        ui_draw_text(layout->ui, layout->ui->font_small, "No BCD decoder", 
+                     x, y, COLOR_TEXT_DIM);
+        return;
+    }
+    
+    /* Get comprehensive UI status */
+    bcd_ui_status_t status;
+    bcd_decoder_get_ui_status((bcd_decoder_t*)bcd, &status);
+    
+    /* === Signal quality bar === */
+    {
+        int bar_w = panel_w - 50;
+        int bar_h = 10;
+        float snr_norm = status.current_snr_db / 24.0f;  /* Normalize 0-24 dB */
+        if (snr_norm < 0) snr_norm = 0;
+        if (snr_norm > 1) snr_norm = 1;
+        int fill_w = (int)(snr_norm * bar_w);
+        
+        /* Signal label */
+        ui_draw_text(layout->ui, layout->ui->font_small, "Signal:", x, y, COLOR_TEXT_DIM);
+        
+        /* Bar background */
+        ui_draw_rect(layout->ui, x + 50, y, bar_w, bar_h, COLOR_BG_DARK);
+        
+        /* Bar fill with color based on strength */
+        uint32_t bar_color;
+        const char* strength_str;
+        if (status.current_snr_db >= 12.0f) {
+            bar_color = COLOR_GREEN;
+            strength_str = "STRONG";
+        } else if (status.current_snr_db >= 6.0f) {
+            bar_color = COLOR_ORANGE;
+            strength_str = "GOOD";
+        } else if (status.current_snr_db >= 1.0f) {
+            bar_color = COLOR_RED;
+            strength_str = "WEAK";
+        } else {
+            bar_color = COLOR_TEXT_DIM;
+            strength_str = "NONE";
+        }
+        
+        if (fill_w > 0) {
+            ui_draw_rect(layout->ui, x + 50, y, fill_w, bar_h, bar_color);
+        }
+        
+        y += line_h;
+        snprintf(buf, sizeof(buf), "SNR: %.1f dB [%s]", status.current_snr_db, strength_str);
+        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, bar_color);
+        y += line_h + 2;
+    }
+    
+    /* === Sync status with P-marker indicators === */
+    {
+        /* Sync state */
+        uint32_t sync_color;
+        const char* sync_str;
+        switch (status.state) {
+            case BCD_STATE_SYNC_LOCKED:
+            case BCD_STATE_TIME_TENTATIVE:
+            case BCD_STATE_TIME_CONFIRMED:
+            case BCD_STATE_TIME_VALID:
+            case BCD_STATE_DECODING:
+                sync_color = COLOR_GREEN;
+                sync_str = "LOCKED";
+                break;
+            case BCD_STATE_SYNC_CONFIRMING:
+            case BCD_STATE_SYNC_CANDIDATE:
+                sync_color = COLOR_ORANGE;
+                sync_str = "CONFIRMING";
+                break;
+            default:
+                sync_color = COLOR_TEXT_DIM;
+                sync_str = "SEARCHING";
+                break;
+        }
+        
+        snprintf(buf, sizeof(buf), "Sync: %s", sync_str);
+        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, sync_color);
+        
+        /* P-marker dots (7 total) */
+        int dot_x = x + 100;
+        int dot_y = y + 3;
+        for (int i = 0; i < 7; i++) {
+            uint32_t dot_color = (i < status.p_markers_found) ? COLOR_GREEN : COLOR_BG_DARK;
+            ui_draw_rect(layout->ui, dot_x + i * 10, dot_y, 6, 6, dot_color);
+        }
+        y += line_h;
+        
+        /* Frame position */
+        if (status.frame_position >= 0) {
+            snprintf(buf, sizeof(buf), "Frame: [%02d/59]", status.frame_position);
+            ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_TEXT);
+        } else {
+            ui_draw_text(layout->ui, layout->ui->font_small, "Frame: [--/59]", x, y, COLOR_TEXT_DIM);
+        }
+        y += line_h;
+    }
+    
+    /* === Last symbol === */
+    {
+        const char* sym_str;
+        uint32_t sym_color = COLOR_TEXT;
+        switch (status.last_symbol) {
+            case BCD_SYMBOL_ZERO:   sym_str = "ZERO"; break;
+            case BCD_SYMBOL_ONE:    sym_str = "ONE"; break;
+            case BCD_SYMBOL_MARKER: sym_str = "P-MARK"; sym_color = COLOR_ACCENT; break;
+            default:                sym_str = "--"; sym_color = COLOR_TEXT_DIM; break;
+        }
+        snprintf(buf, sizeof(buf), "Last: %s (%.0fms)", sym_str, status.last_symbol_width_ms);
+        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, sym_color);
+        
+        /* Pulse indicator */
+        if (status.in_pulse) {
+            ui_draw_rect(layout->ui, x + panel_w - 20, y, 12, 12, COLOR_RED);
+        }
+        y += line_h + 4;
+    }
+    
+    /* === Decoded time === */
+    {
+        if (status.time_valid) {
+            snprintf(buf, sizeof(buf), "%02d:%02d UTC", 
+                     status.current_time.hours, status.current_time.minutes);
+            ui_draw_text(layout->ui, layout->ui->font_title, buf, x, y, COLOR_ACCENT);
+            y += 22;
+            
+            snprintf(buf, sizeof(buf), "DOY %03d  Year %02d", 
+                     status.current_time.day_of_year, status.current_time.year);
+            ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_TEXT);
+            y += line_h;
+            
+            if (status.current_time.dut1_sign != 0) {
+                snprintf(buf, sizeof(buf), "DUT1: %+.1f s", 
+                         status.current_time.dut1_sign * status.current_time.dut1_value);
+                ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_TEXT_DIM);
+                y += line_h;
+            }
+        } else {
+            ui_draw_text(layout->ui, layout->ui->font_small, "--:-- UTC", x, y, COLOR_TEXT_DIM);
+            y += line_h;
+        }
+    }
+    
+    y += 4;
+    
+    /* === Statistics === */
+    {
+        snprintf(buf, sizeof(buf), "Decoded: %u | Failed: %u", 
+                 status.frames_decoded, status.frames_failed);
+        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_TEXT_DIM);
+        y += line_h;
+        
+        snprintf(buf, sizeof(buf), "BCD1 pkts: %u", status.bcd1_packets);
+        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_GREEN);
+    }
+    
+    /* Sync LED at bottom */
+    layout->led_bcd_sync.on = (status.state >= BCD_STATE_SYNC_LOCKED);
+    widget_led_draw(&layout->led_bcd_sync, layout->ui);
 }

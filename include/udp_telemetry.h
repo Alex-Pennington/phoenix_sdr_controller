@@ -30,6 +30,7 @@ typedef enum {
     TELEM_SUBCARRIER,   /* SUBC - subcarrier detection */
     TELEM_TONE500,      /* T500 - 500 Hz tone tracking */
     TELEM_TONE600,      /* T600 - 600 Hz tone tracking */
+    TELEM_BCD100,       /* BCD1 - BCD 100 Hz subcarrier */
     TELEM_MARKER,       /* MARK - minute marker events */
     TELEM_SYNC          /* SYNC - synchronization state */
 } telemetry_type_t;
@@ -97,6 +98,16 @@ typedef struct {
     uint32_t last_update;
 } telem_tone_t;
 
+/* BCD1 - BCD 100 Hz subcarrier data */
+typedef struct {
+    float envelope;         /* Envelope amplitude */
+    float snr_db;           /* Signal-to-noise ratio */
+    float noise_floor_db;   /* Noise floor level */
+    char status[16];        /* Status string */
+    bool valid;
+    uint32_t last_update;
+} telem_bcd100_t;
+
 /* Sync state */
 typedef enum {
     SYNC_ACQUIRING = 0, /* Initial state - searching for first marker */
@@ -139,6 +150,7 @@ typedef struct {
     telem_subcarrier_t subcarrier;
     telem_tone_t tone500;
     telem_tone_t tone600;
+    telem_bcd100_t bcd100;
     telem_marker_t marker;
     telem_sync_t sync;
     

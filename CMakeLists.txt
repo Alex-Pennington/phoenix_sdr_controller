@@ -50,6 +50,7 @@ set(SOURCES
     src/process_manager.c
     src/udp_telemetry.c
     src/aff.c
+    src/bdc/bcd_decoder.c
 )
 
 set(HEADERS

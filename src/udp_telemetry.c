@@ -395,6 +395,44 @@ telemetry_type_t udp_telemetry_parse(udp_telemetry_t* telem, const char* packet)
         
         return TELEM_TONE600;
     }
+    else if (strcmp(token, "BCD1") == 0) {
+        /* BCD1,HH:MM:SS,timestamp_ms,envelope,snr_db,noise_floor_db,status */
+        /* Skip time field */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        /* Skip timestamp_ms field */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        
+        /* envelope */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        telem->bcd100.envelope = (float)atof(token);
+        
+        /* snr_db */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        telem->bcd100.snr_db = (float)atof(token);
+        
+        /* noise_floor_db */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        telem->bcd100.noise_floor_db = (float)atof(token);
+        
+        /* status */
+        token = strtok(NULL, ",");
+        if (token) {
+            strncpy(telem->bcd100.status, token, sizeof(telem->bcd100.status) - 1);
+            telem->bcd100.status[sizeof(telem->bcd100.status) - 1] = '\0';
+        } else {
+            telem->bcd100.status[0] = '\0';
+        }
+        
+        telem->bcd100.valid = true;
+        telem->bcd100.last_update = now;
+        
+        return TELEM_BCD100;
+    }
     else if (strcmp(token, "MARK") == 0) {
         /* MARK,time,timestamp_ms,marker_num,wwv_sec,expected,accum_energy,duration_ms,since_last_sec,baseline,threshold */
         /* Skip time field */
