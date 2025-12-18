@@ -125,7 +125,8 @@ typedef struct {
     uint32_t failed_count;
     uint32_t symbol_count;
     char last_symbol;           /* '0', '1', 'P', or '?' */
-    int last_symbol_pos;
+    int last_symbol_pos;        /* Calculated from sync timing, or -1 */
+    float last_symbol_timestamp_ms;  /* Modem timestamp when symbol detected */
     float last_symbol_width_ms;
     /* Decoded time (if valid) */
     bool time_valid;

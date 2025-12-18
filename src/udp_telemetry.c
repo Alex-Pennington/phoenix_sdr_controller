@@ -491,21 +491,24 @@ telemetry_type_t udp_telemetry_parse(udp_telemetry_t* telem, const char* packet)
             telem->bcds.last_update = now;
         }
         else if (strcmp(token, "SYM") == 0) {
-            /* SYM,symbol,frame_pos,width_ms */
+            /* SYM,symbol,timestamp_ms,width_ms */
             /* symbol (0, 1, P) */
             token = strtok(NULL, ",");
             if (!token) return TELEM_NONE;
             telem->bcds.last_symbol = token[0];
             
-            /* frame_pos */
+            /* timestamp_ms (modem timestamp) */
             token = strtok(NULL, ",");
             if (!token) return TELEM_NONE;
-            telem->bcds.last_symbol_pos = atoi(token);
+            telem->bcds.last_symbol_timestamp_ms = (float)atof(token);
             
             /* width_ms */
             token = strtok(NULL, ",");
             if (!token) return TELEM_NONE;
             telem->bcds.last_symbol_width_ms = (float)atof(token);
+            
+            /* Calculate frame position from sync timing if locked */
+            telem->bcds.last_symbol_pos = -1;  /* Will be calculated by frame assembler */
             
             telem->bcds.valid = true;
             telem->bcds.last_update = now;
