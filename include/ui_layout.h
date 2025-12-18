@@ -198,4 +198,7 @@ void ui_layout_draw_wwv_panel(ui_layout_t* layout, const udp_telemetry_t* telem)
 void ui_layout_sync_bcd(ui_layout_t* layout, const bcd_decoder_t* bcd);
 void ui_layout_draw_bcd_panel(ui_layout_t* layout, const bcd_decoder_t* bcd);
 
+/* Draw BCD panel from modem telemetry (BCDS packets) */
+void ui_layout_draw_bcd_panel_from_telem(ui_layout_t* layout, const udp_telemetry_t* telem);
+
 #endif /* UI_LAYOUT_H */

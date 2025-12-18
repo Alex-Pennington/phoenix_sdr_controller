@@ -66,6 +66,15 @@ static sync_state_t parse_sync_state(const char* str)
     return SYNC_ACQUIRING;
 }
 
+/* Helper: Parse BCD modem sync state string */
+static bcd_modem_sync_state_t parse_bcd_sync_state(const char* str)
+{
+    if (!str) return BCD_MODEM_SYNC_SEARCHING;
+    if (strcmp(str, "LOCKED") == 0) return BCD_MODEM_SYNC_LOCKED;
+    if (strcmp(str, "CONFIRMING") == 0) return BCD_MODEM_SYNC_CONFIRMING;
+    return BCD_MODEM_SYNC_SEARCHING;
+}
+
 /*
  * Create telemetry receiver
  */
@@ -395,8 +404,9 @@ telemetry_type_t udp_telemetry_parse(udp_telemetry_t* telem, const char* packet)
         
         return TELEM_TONE600;
     }
-    else if (strcmp(token, "BCD1") == 0) {
-        /* BCD1,HH:MM:SS,timestamp_ms,envelope,snr_db,noise_floor_db,status */
+    else if (strcmp(token, "BCD1") == 0 || strcmp(token, "BCDE") == 0) {
+        /* BCDE,HH:MM:SS,timestamp_ms,envelope,snr_db,noise_floor_db,status */
+        /* (Also accept legacy BCD1 format) */
         /* Skip time field */
         token = strtok(NULL, ",");
         if (!token) return TELEM_NONE;
@@ -431,7 +441,122 @@ telemetry_type_t udp_telemetry_parse(udp_telemetry_t* telem, const char* packet)
         telem->bcd100.valid = true;
         telem->bcd100.last_update = now;
         
-        return TELEM_BCD100;
+        return TELEM_BCDE;  /* Return new type (TELEM_BCD100 still works for legacy) */
+    }
+    else if (strcmp(token, "BCDS") == 0) {
+        /* BCDS - BCD decoder status from modem
+         * Subformats:
+         *   BCDS,STATUS,HH:MM:SS,timestamp_ms,sync_state,frame_pos,decoded,failed,symbols
+         *   BCDS,SYM,symbol,frame_pos,width_ms
+         *   BCDS,TIME,HH:MM:SS,hours,minutes,doy,year,dut1_sign,dut1_value
+         */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        
+        if (strcmp(token, "STATUS") == 0) {
+            /* STATUS,HH:MM:SS,timestamp_ms,sync_state,frame_pos,decoded,failed,symbols */
+            /* Skip time field */
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            /* Skip timestamp_ms */
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            
+            /* sync_state */
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            telem->bcds.sync_state = parse_bcd_sync_state(token);
+            
+            /* frame_pos */
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            telem->bcds.frame_pos = atoi(token);
+            
+            /* decoded */
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            telem->bcds.decoded_count = (uint32_t)atoi(token);
+            
+            /* failed */
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            telem->bcds.failed_count = (uint32_t)atoi(token);
+            
+            /* symbols */
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            telem->bcds.symbol_count = (uint32_t)atoi(token);
+            
+            telem->bcds.valid = true;
+            telem->bcds.last_update = now;
+        }
+        else if (strcmp(token, "SYM") == 0) {
+            /* SYM,symbol,frame_pos,width_ms */
+            /* symbol (0, 1, P) */
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            telem->bcds.last_symbol = token[0];
+            
+            /* frame_pos */
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            telem->bcds.last_symbol_pos = atoi(token);
+            
+            /* width_ms */
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            telem->bcds.last_symbol_width_ms = (float)atof(token);
+            
+            telem->bcds.valid = true;
+            telem->bcds.last_update = now;
+        }
+        else if (strcmp(token, "TIME") == 0) {
+            /* TIME,HH:MM:SS,hours,minutes,doy,year,dut1_sign,dut1_value */
+            /* Skip time string */
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            
+            /* hours */
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            telem->bcds.hours = atoi(token);
+            
+            /* minutes */
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            telem->bcds.minutes = atoi(token);
+            
+            /* doy */
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            telem->bcds.day_of_year = atoi(token);
+            
+            /* year */
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            telem->bcds.year = atoi(token);
+            
+            /* dut1_sign */
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            telem->bcds.dut1_sign = atoi(token);
+            
+            /* dut1_value */
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            telem->bcds.dut1_value = (float)atof(token);
+            
+            telem->bcds.time_valid = true;
+            telem->bcds.valid = true;
+            telem->bcds.last_update = now;
+            
+            LOG_INFO("[BCD] Decoded: %02d:%02d DOY=%03d Year=%02d DUT1=%+.1fs",
+                     telem->bcds.hours, telem->bcds.minutes,
+                     telem->bcds.day_of_year, telem->bcds.year,
+                     telem->bcds.dut1_sign * telem->bcds.dut1_value);
+        }
+        
+        return TELEM_BCDS;
     }
     else if (strcmp(token, "MARK") == 0) {
         /* MARK,time,timestamp_ms,marker_num,wwv_sec,expected,accum_energy,duration_ms,since_last_sec,baseline,threshold */

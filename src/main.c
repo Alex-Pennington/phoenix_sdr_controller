@@ -205,8 +205,13 @@ int main(int argc, char* argv[])
             ui_layout_draw_wwv_panel(app.layout, app.telemetry);
         }
         
-        /* Draw BCD time code panel */
-        if (app.bcd_decoder) {
+        /* Draw BCD time code panel 
+         * Prefer modem BCDS data if available, otherwise use local decoder */
+        if (app.telemetry && app.telemetry->bcds.valid) {
+            /* Use modem-decoded BCD data */
+            ui_layout_draw_bcd_panel_from_telem(app.layout, app.telemetry);
+        } else if (app.bcd_decoder) {
+            /* Fall back to local decoder */
             ui_layout_sync_bcd(app.layout, app.bcd_decoder);
             ui_layout_draw_bcd_panel(app.layout, app.bcd_decoder);
         }

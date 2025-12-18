@@ -30,7 +30,9 @@ typedef enum {
     TELEM_SUBCARRIER,   /* SUBC - subcarrier detection */
     TELEM_TONE500,      /* T500 - 500 Hz tone tracking */
     TELEM_TONE600,      /* T600 - 600 Hz tone tracking */
-    TELEM_BCD100,       /* BCD1 - BCD 100 Hz subcarrier */
+    TELEM_BCD100,       /* BCD1 - BCD 100 Hz subcarrier (legacy) */
+    TELEM_BCDE,         /* BCDE - BCD envelope data from modem */
+    TELEM_BCDS,         /* BCDS - BCD decoder status/symbols/time from modem */
     TELEM_MARKER,       /* MARK - minute marker events */
     TELEM_SYNC          /* SYNC - synchronization state */
 } telemetry_type_t;
@@ -108,6 +110,35 @@ typedef struct {
     uint32_t last_update;
 } telem_bcd100_t;
 
+/* BCD sync state (from modem decoder) */
+typedef enum {
+    BCD_MODEM_SYNC_SEARCHING = 0,
+    BCD_MODEM_SYNC_CONFIRMING,
+    BCD_MODEM_SYNC_LOCKED
+} bcd_modem_sync_state_t;
+
+/* BCDS - BCD decoder status from modem */
+typedef struct {
+    bcd_modem_sync_state_t sync_state;
+    int frame_pos;              /* 0-59, or -1 if not synced */
+    uint32_t decoded_count;
+    uint32_t failed_count;
+    uint32_t symbol_count;
+    char last_symbol;           /* '0', '1', 'P', or '?' */
+    int last_symbol_pos;
+    float last_symbol_width_ms;
+    /* Decoded time (if valid) */
+    bool time_valid;
+    int hours;
+    int minutes;
+    int day_of_year;
+    int year;
+    int dut1_sign;
+    float dut1_value;
+    bool valid;
+    uint32_t last_update;
+} telem_bcds_t;
+
 /* Sync state */
 typedef enum {
     SYNC_ACQUIRING = 0, /* Initial state - searching for first marker */
@@ -151,6 +182,7 @@ typedef struct {
     telem_tone_t tone500;
     telem_tone_t tone600;
     telem_bcd100_t bcd100;
+    telem_bcds_t bcds;          /* BCDS - decoder status from modem */
     telem_marker_t marker;
     telem_sync_t sync;
     

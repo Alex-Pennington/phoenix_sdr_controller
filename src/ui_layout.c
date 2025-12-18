@@ -1270,3 +1270,169 @@ void ui_layout_draw_bcd_panel(ui_layout_t* layout, const bcd_decoder_t* bcd)
     layout->led_bcd_sync.on = (status.state >= BCD_STATE_SYNC_LOCKED);
     widget_led_draw(&layout->led_bcd_sync, layout->ui);
 }
+
+/*
+ * Draw BCD panel from modem telemetry (BCDS packets)
+ * This displays data received from the modem's BCD decoder rather than local decoding.
+ */
+void ui_layout_draw_bcd_panel_from_telem(ui_layout_t* layout, const udp_telemetry_t* telem)
+{
+    if (!layout || !layout->ui) return;
+    
+    /* Draw panel background */
+    widget_panel_draw(&layout->panel_bcd, layout->ui);
+    
+    int x = layout->regions.bcd_panel.x + 8;
+    int y = layout->regions.bcd_panel.y + 22;
+    int panel_w = layout->regions.bcd_panel.w - 16;
+    int line_h = 16;
+    char buf[64];
+    
+    /* Check if we have telemetry */
+    if (!telem || !telem->bcds.valid) {
+        ui_draw_text(layout->ui, layout->ui->font_small, "Awaiting BCDS data...", 
+                     x, y, COLOR_TEXT_DIM);
+        widget_led_draw(&layout->led_bcd_sync, layout->ui);
+        return;
+    }
+    
+    const telem_bcds_t* bcds = &telem->bcds;
+    
+    /* === Signal quality bar (from BCDE envelope data) === */
+    if (telem->bcd100.valid) {
+        int bar_w = panel_w - 50;
+        int bar_h = 10;
+        float snr_norm = telem->bcd100.snr_db / 24.0f;
+        if (snr_norm < 0) snr_norm = 0;
+        if (snr_norm > 1) snr_norm = 1;
+        int fill_w = (int)(snr_norm * bar_w);
+        
+        ui_draw_text(layout->ui, layout->ui->font_small, "Signal:", x, y, COLOR_TEXT_DIM);
+        ui_draw_rect(layout->ui, x + 50, y, bar_w, bar_h, COLOR_BG_DARK);
+        
+        uint32_t bar_color;
+        const char* strength_str;
+        if (telem->bcd100.snr_db >= 12.0f) {
+            bar_color = COLOR_GREEN;
+            strength_str = "STRONG";
+        } else if (telem->bcd100.snr_db >= 6.0f) {
+            bar_color = COLOR_ORANGE;
+            strength_str = "GOOD";
+        } else if (telem->bcd100.snr_db >= 1.0f) {
+            bar_color = COLOR_RED;
+            strength_str = "WEAK";
+        } else {
+            bar_color = COLOR_TEXT_DIM;
+            strength_str = "NONE";
+        }
+        
+        if (fill_w > 0) {
+            ui_draw_rect(layout->ui, x + 50, y, fill_w, bar_h, bar_color);
+        }
+        y += line_h;
+        
+        snprintf(buf, sizeof(buf), "SNR: %.1f dB [%s]", telem->bcd100.snr_db, strength_str);
+        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, bar_color);
+        y += line_h + 2;
+    }
+    
+    /* === Sync status === */
+    {
+        uint32_t sync_color;
+        const char* sync_str;
+        switch (bcds->sync_state) {
+            case BCD_MODEM_SYNC_LOCKED:
+                sync_color = COLOR_GREEN;
+                sync_str = "LOCKED";
+                break;
+            case BCD_MODEM_SYNC_CONFIRMING:
+                sync_color = COLOR_ORANGE;
+                sync_str = "CONFIRMING";
+                break;
+            default:
+                sync_color = COLOR_TEXT_DIM;
+                sync_str = "SEARCHING";
+                break;
+        }
+        
+        snprintf(buf, sizeof(buf), "Sync: %s", sync_str);
+        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, sync_color);
+        
+        /* P-marker dots based on frame progress (7 markers at 0,9,19,29,39,49,59) */
+        int dot_x = x + 100;
+        int dot_y = y + 3;
+        int markers_passed = 0;
+        if (bcds->frame_pos >= 0) markers_passed = 1;
+        if (bcds->frame_pos >= 9) markers_passed = 2;
+        if (bcds->frame_pos >= 19) markers_passed = 3;
+        if (bcds->frame_pos >= 29) markers_passed = 4;
+        if (bcds->frame_pos >= 39) markers_passed = 5;
+        if (bcds->frame_pos >= 49) markers_passed = 6;
+        if (bcds->frame_pos >= 59) markers_passed = 7;
+        
+        for (int i = 0; i < 7; i++) {
+            uint32_t dot_color = (i < markers_passed) ? COLOR_GREEN : COLOR_BG_DARK;
+            ui_draw_rect(layout->ui, dot_x + i * 10, dot_y, 6, 6, dot_color);
+        }
+        y += line_h;
+        
+        /* Frame position */
+        if (bcds->frame_pos >= 0) {
+            snprintf(buf, sizeof(buf), "Frame: [%02d/59]", bcds->frame_pos);
+            ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_TEXT);
+        } else {
+            ui_draw_text(layout->ui, layout->ui->font_small, "Frame: [--/59]", x, y, COLOR_TEXT_DIM);
+        }
+        y += line_h;
+    }
+    
+    /* === Last symbol === */
+    {
+        const char* sym_str;
+        uint32_t sym_color = COLOR_TEXT;
+        switch (bcds->last_symbol) {
+            case '0': sym_str = "ZERO"; break;
+            case '1': sym_str = "ONE"; break;
+            case 'P': sym_str = "P-MARK"; sym_color = COLOR_ACCENT; break;
+            default:  sym_str = "--"; sym_color = COLOR_TEXT_DIM; break;
+        }
+        snprintf(buf, sizeof(buf), "Last: %s (%.0fms)", sym_str, bcds->last_symbol_width_ms);
+        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, sym_color);
+        y += line_h + 4;
+    }
+    
+    /* === Decoded time === */
+    if (bcds->time_valid) {
+        snprintf(buf, sizeof(buf), "%02d:%02d UTC", bcds->hours, bcds->minutes);
+        ui_draw_text(layout->ui, layout->ui->font_title, buf, x, y, COLOR_ACCENT);
+        y += 22;
+        
+        snprintf(buf, sizeof(buf), "DOY %03d  Year %02d", bcds->day_of_year, bcds->year);
+        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_TEXT);
+        y += line_h;
+        
+        if (bcds->dut1_sign != 0) {
+            snprintf(buf, sizeof(buf), "DUT1: %+.1f s", bcds->dut1_sign * bcds->dut1_value);
+            ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_TEXT_DIM);
+            y += line_h;
+        }
+    } else {
+        ui_draw_text(layout->ui, layout->ui->font_small, "--:-- UTC", x, y, COLOR_TEXT_DIM);
+        y += line_h;
+    }
+    
+    y += 4;
+    
+    /* === Statistics === */
+    snprintf(buf, sizeof(buf), "Decoded: %u | Failed: %u", 
+             bcds->decoded_count, bcds->failed_count);
+    ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_TEXT_DIM);
+    y += line_h;
+    
+    snprintf(buf, sizeof(buf), "Symbols: %u", bcds->symbol_count);
+    ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_GREEN);
+    
+    /* Sync LED at bottom */
+    layout->led_bcd_sync.on = (bcds->sync_state == BCD_MODEM_SYNC_LOCKED);
+    widget_led_draw(&layout->led_bcd_sync, layout->ui);
+}
