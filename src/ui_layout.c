@@ -1093,7 +1093,9 @@ void ui_layout_sync_bcd(ui_layout_t* layout, const bcd_decoder_t* bcd)
 }
 
 /*
- * Draw BCD time code panel
+ * Draw BCD time code panel (local fallback decoder)
+ * Note: This displays data from the local frame assembler.
+ * SNR info not available here - use telemetry panel for signal quality.
  */
 void ui_layout_draw_bcd_panel(ui_layout_t* layout, const bcd_decoder_t* bcd)
 {
@@ -1104,7 +1106,6 @@ void ui_layout_draw_bcd_panel(ui_layout_t* layout, const bcd_decoder_t* bcd)
     
     int x = layout->regions.bcd_panel.x + 8;
     int y = layout->regions.bcd_panel.y + 22;
-    int panel_w = layout->regions.bcd_panel.w - 16;
     int line_h = 16;
     char buf[64];
     
@@ -1119,70 +1120,23 @@ void ui_layout_draw_bcd_panel(ui_layout_t* layout, const bcd_decoder_t* bcd)
     bcd_ui_status_t status;
     bcd_decoder_get_ui_status((bcd_decoder_t*)bcd, &status);
     
-    /* === Signal quality bar === */
-    {
-        int bar_w = panel_w - 50;
-        int bar_h = 10;
-        float snr_norm = status.current_snr_db / 24.0f;  /* Normalize 0-24 dB */
-        if (snr_norm < 0) snr_norm = 0;
-        if (snr_norm > 1) snr_norm = 1;
-        int fill_w = (int)(snr_norm * bar_w);
-        
-        /* Signal label */
-        ui_draw_text(layout->ui, layout->ui->font_small, "Signal:", x, y, COLOR_TEXT_DIM);
-        
-        /* Bar background */
-        ui_draw_rect(layout->ui, x + 50, y, bar_w, bar_h, COLOR_BG_DARK);
-        
-        /* Bar fill with color based on strength */
-        uint32_t bar_color;
-        const char* strength_str;
-        if (status.current_snr_db >= 12.0f) {
-            bar_color = COLOR_GREEN;
-            strength_str = "STRONG";
-        } else if (status.current_snr_db >= 6.0f) {
-            bar_color = COLOR_ORANGE;
-            strength_str = "GOOD";
-        } else if (status.current_snr_db >= 1.0f) {
-            bar_color = COLOR_RED;
-            strength_str = "WEAK";
-        } else {
-            bar_color = COLOR_TEXT_DIM;
-            strength_str = "NONE";
-        }
-        
-        if (fill_w > 0) {
-            ui_draw_rect(layout->ui, x + 50, y, fill_w, bar_h, bar_color);
-        }
-        
-        y += line_h;
-        snprintf(buf, sizeof(buf), "SNR: %.1f dB [%s]", status.current_snr_db, strength_str);
-        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, bar_color);
-        y += line_h + 2;
-    }
-    
     /* === Sync status with P-marker indicators === */
     {
         /* Sync state */
         uint32_t sync_color;
         const char* sync_str;
-        switch (status.state) {
-            case BCD_STATE_SYNC_LOCKED:
-            case BCD_STATE_TIME_TENTATIVE:
-            case BCD_STATE_TIME_CONFIRMED:
-            case BCD_STATE_TIME_VALID:
-            case BCD_STATE_DECODING:
+        switch (status.sync_state) {
+            case BCD_SYNC_LOCKED:
                 sync_color = COLOR_GREEN;
                 sync_str = "LOCKED";
                 break;
-            case BCD_STATE_SYNC_CONFIRMING:
-            case BCD_STATE_SYNC_CANDIDATE:
+            case BCD_SYNC_ACTIVE:
                 sync_color = COLOR_ORANGE;
-                sync_str = "CONFIRMING";
+                sync_str = "ACTIVE";
                 break;
             default:
                 sync_color = COLOR_TEXT_DIM;
-                sync_str = "SEARCHING";
+                sync_str = "WAITING";
                 break;
         }
         
@@ -1200,7 +1154,8 @@ void ui_layout_draw_bcd_panel(ui_layout_t* layout, const bcd_decoder_t* bcd)
         
         /* Frame position */
         if (status.frame_position >= 0) {
-            snprintf(buf, sizeof(buf), "Frame: [%02d/59]", status.frame_position);
+            snprintf(buf, sizeof(buf), "Frame: [%02d/59] (%d sym)", 
+                     status.frame_position, status.symbols_in_frame);
             ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_TEXT);
         } else {
             ui_draw_text(layout->ui, layout->ui->font_small, "Frame: [--/59]", x, y, COLOR_TEXT_DIM);
@@ -1220,11 +1175,6 @@ void ui_layout_draw_bcd_panel(ui_layout_t* layout, const bcd_decoder_t* bcd)
         }
         snprintf(buf, sizeof(buf), "Last: %s (%.0fms)", sym_str, status.last_symbol_width_ms);
         ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, sym_color);
-        
-        /* Pulse indicator */
-        if (status.in_pulse) {
-            ui_draw_rect(layout->ui, x + panel_w - 20, y, 12, 12, COLOR_RED);
-        }
         y += line_h + 4;
     }
     
@@ -1262,12 +1212,12 @@ void ui_layout_draw_bcd_panel(ui_layout_t* layout, const bcd_decoder_t* bcd)
         ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_TEXT_DIM);
         y += line_h;
         
-        snprintf(buf, sizeof(buf), "BCD1 pkts: %u", status.bcd1_packets);
+        snprintf(buf, sizeof(buf), "Symbols: %u", status.total_symbols);
         ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_GREEN);
     }
     
     /* Sync LED at bottom */
-    layout->led_bcd_sync.on = (status.state >= BCD_STATE_SYNC_LOCKED);
+    layout->led_bcd_sync.on = (status.sync_state == BCD_SYNC_LOCKED);
     widget_led_draw(&layout->led_bcd_sync, layout->ui);
 }
 

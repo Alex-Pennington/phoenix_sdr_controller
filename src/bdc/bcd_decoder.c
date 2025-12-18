@@ -1,15 +1,14 @@
 /**
  * @file bcd_decoder.c
- * @brief WWV BCD Time Code Decoder Implementation
+ * @brief WWV BCD Frame Assembler and Decoder Implementation (Controller Side)
  *
- * Implements the algorithm from wwv_bcd_decoder_algorithm.md:
- * - Pulse width measurement with hysteresis thresholding
- * - Symbol classification (0/1/P markers)
- * - Frame synchronization using position marker pattern
- * - BCD decoding of hours, minutes, day of year, year
+ * Receives pre-detected symbols from modem with timestamps.
+ * Uses minute sync timing from sync_detector to calculate frame position.
+ * Assembles 60-symbol frames and decodes BCD time code.
  */
 
 #include "bcd_decoder.h"
+#include "../include/common.h"  /* For LOG_INFO etc */
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -23,43 +22,27 @@
 static const int P_MARKER_POSITIONS[] = {0, 9, 19, 29, 39, 49, 59};
 #define NUM_P_MARKERS 7
 
-/* Expected spacing between consecutive P markers */
-static const int P_MARKER_SPACING[] = {9, 10, 10, 10, 10, 10};  /* P0->P1, P1->P2, etc. */
-
 /*============================================================================
  * Internal State Structure
  *============================================================================*/
 
 struct bcd_decoder {
-    /* Pulse detection state */
-    bool in_pulse;                  /* Currently detecting a pulse */
-    float pulse_start_ms;           /* Timestamp when pulse started */
-    float pulse_snr_sum;            /* Sum of SNR during pulse (for averaging) */
-    int pulse_sample_count;         /* Samples in current pulse */
-    
-    /* Hysteresis state */
-    float adaptive_threshold;       /* Adaptive noise floor tracking */
-    
-    /* Symbol buffer (circular, holds up to 2 frames for sync) */
-    bcd_symbol_t symbol_buffer[120];
-    float symbol_timestamps[120];   /* When each symbol was received */
-    float symbol_widths[120];       /* Pulse width of each symbol */
-    int symbol_write_idx;           /* Next write position */
-    int symbol_count;               /* Total symbols received */
-    
-    /* Frame synchronization */
+    /* Sync state */
     bcd_sync_state_t sync_state;
-    int frame_position;             /* Current position within frame (0-59) */
-    int sync_confidence;            /* Consecutive good frames */
-    int p_marker_miss_count;        /* Consecutive missed P markers */
+    int frame_position;             /* Current position (0-59) or -1 */
+    int last_frame_position;        /* Previous position for wrap detection */
     
-    /* Current frame being decoded */
+    /* Frame buffer */
     bcd_symbol_t frame[BCD_FRAME_LENGTH];
-    float frame_snr_sum;
-    float frame_snr_min;
-    int frame_symbol_count;
+    int symbols_in_frame;
+    int p_markers_in_frame;
     
-    /* Decoded time (most recent) */
+    /* Last symbol info */
+    bcd_symbol_t last_symbol;
+    float last_symbol_width_ms;
+    float last_symbol_timestamp_ms;
+    
+    /* Decoded time */
     bcd_time_t last_time;
     
     /* Statistics */
@@ -68,27 +51,7 @@ struct bcd_decoder {
     uint32_t total_symbols;
     
     /* Timing */
-    float last_timestamp_ms;
-    bool first_sample;
-
-    /* BCD1 packet counter */
-    uint32_t bcd1_packets;
-    
-    /* UI status tracking */
-    float current_snr_db;           /* Latest SNR reading */
-    float peak_snr_db;              /* Peak SNR in frame */
-    float noise_floor_db;           /* Noise floor */
-    bcd_symbol_t last_symbol;       /* Most recent decoded symbol */
-    float last_symbol_width_ms;     /* Width of last symbol */
-    int p_markers_in_frame;         /* P markers found in current frame */
-    float last_decode_timestamp_ms; /* When last successful decode happened */
-    bcd_decoder_state_t ui_state;   /* Current UI state */
-    
-    /* Callbacks */
-    bcd_time_callback_fn time_callback;
-    void *time_callback_data;
-    bcd_symbol_callback_fn symbol_callback;
-    void *symbol_callback_data;
+    float last_minute_anchor_ms;
 };
 
 /*============================================================================
@@ -96,19 +59,14 @@ struct bcd_decoder {
  *============================================================================*/
 
 /**
- * Classify pulse width into symbol type
+ * Convert char symbol to enum
  */
-static bcd_symbol_t classify_pulse(float width_ms) {
-    if (width_ms < BCD_PULSE_MIN_MS || width_ms > BCD_PULSE_MAX_MS) {
-        return BCD_SYMBOL_NONE;  /* Invalid pulse */
-    }
-    
-    if (width_ms < BCD_PULSE_ZERO_MAX_MS) {
-        return BCD_SYMBOL_ZERO;  /* ~200ms = binary 0 */
-    } else if (width_ms < BCD_PULSE_ONE_MAX_MS) {
-        return BCD_SYMBOL_ONE;   /* ~500ms = binary 1 */
-    } else {
-        return BCD_SYMBOL_MARKER; /* ~800ms = position marker */
+static bcd_symbol_t char_to_symbol(char c) {
+    switch (c) {
+        case '0': return BCD_SYMBOL_ZERO;
+        case '1': return BCD_SYMBOL_ONE;
+        case 'P': return BCD_SYMBOL_MARKER;
+        default:  return BCD_SYMBOL_NONE;
     }
 }
 
@@ -123,91 +81,7 @@ static bool is_p_marker_position(int pos) {
 }
 
 /**
- * Store a symbol in the circular buffer
- */
-static void store_symbol(bcd_decoder_t *dec, bcd_symbol_t symbol, 
-                         float timestamp_ms, float width_ms) {
-    dec->symbol_buffer[dec->symbol_write_idx] = symbol;
-    dec->symbol_timestamps[dec->symbol_write_idx] = timestamp_ms;
-    dec->symbol_widths[dec->symbol_write_idx] = width_ms;
-    
-    dec->symbol_write_idx = (dec->symbol_write_idx + 1) % 120;
-    dec->symbol_count++;
-    dec->total_symbols++;
-}
-
-/**
- * Get symbol from buffer (0 = most recent, negative = older)
- */
-static bcd_symbol_t get_symbol(bcd_decoder_t *dec, int offset) {
-    int idx = dec->symbol_write_idx - 1 + offset;
-    while (idx < 0) idx += 120;
-    idx %= 120;
-    return dec->symbol_buffer[idx];
-}
-
-/**
- * Look for P marker pattern in recent symbols to establish sync
- * Returns frame offset if pattern found, -1 otherwise
- */
-static int find_sync_pattern(bcd_decoder_t *dec) {
-    if (dec->symbol_count < 20) return -1;  /* Need enough history */
-    
-    /* Look for at least 3 P markers with correct spacing */
-    int p_markers_found = 0;
-    int last_p_offset = -1;
-    int inferred_frame_start = -1;
-    
-    /* Scan recent symbols (most recent first) */
-    for (int i = 0; i < 70 && i < dec->symbol_count; i++) {
-        bcd_symbol_t sym = get_symbol(dec, -i);
-        
-        if (sym == BCD_SYMBOL_MARKER) {
-            if (last_p_offset < 0) {
-                /* First P marker found */
-                last_p_offset = i;
-                p_markers_found = 1;
-            } else {
-                /* Check spacing to previous P marker */
-                int spacing = last_p_offset - i;  /* Positive, going backwards */
-                
-                /* Valid spacings are 9 (P0->P1) or 10 (all others) */
-                if (spacing == 9 || spacing == 10) {
-                    p_markers_found++;
-                    
-                    /* Infer which P marker this is based on spacing */
-                    if (p_markers_found >= BCD_SYNC_MARKERS_REQUIRED) {
-                        /* We have enough markers - calculate frame start */
-                        /* The most recent P marker (at last_p_offset) */
-                        /* needs to be mapped to a frame position */
-                        
-                        /* Count back through spacings to find P0 */
-                        int pos = 0;
-                        int scan = last_p_offset;
-                        
-                        /* This is simplified - just use the pattern */
-                        inferred_frame_start = last_p_offset;
-                        return inferred_frame_start;
-                    }
-                    
-                    last_p_offset = i;
-                } else if (spacing > 15) {
-                    /* Gap too large, reset search */
-                    last_p_offset = i;
-                    p_markers_found = 1;
-                }
-            }
-        }
-    }
-    
-    return -1;
-}
-
-/**
  * Decode BCD value from symbol array
- * @param symbols   Array of symbols (BCD_SYMBOL_ZERO or BCD_SYMBOL_ONE)
- * @param weights   Array of BCD weights for each position
- * @param count     Number of bits to decode
  */
 static int decode_bcd_field(bcd_symbol_t *symbols, const int *weights, int count) {
     int value = 0;
@@ -215,8 +89,7 @@ static int decode_bcd_field(bcd_symbol_t *symbols, const int *weights, int count
         if (symbols[i] == BCD_SYMBOL_ONE) {
             value += weights[i];
         } else if (symbols[i] != BCD_SYMBOL_ZERO) {
-            /* Unexpected symbol in data position */
-            return -1;
+            return -1;  /* Invalid symbol in data position */
         }
     }
     return value;
@@ -229,90 +102,121 @@ static bool decode_frame(bcd_decoder_t *dec, bcd_time_t *time_out,
                          bcd_frame_quality_t *quality_out) {
     bcd_symbol_t *f = dec->frame;
     
-    /* Verify position markers are present */
+    /* Count position markers */
     int markers_found = 0;
+    int markers_correct = 0;
     for (int i = 0; i < NUM_P_MARKERS; i++) {
-        if (f[P_MARKER_POSITIONS[i]] == BCD_SYMBOL_MARKER) {
+        int pos = P_MARKER_POSITIONS[i];
+        if (f[pos] == BCD_SYMBOL_MARKER) {
+            markers_found++;
+            markers_correct++;
+        }
+    }
+    
+    /* Also count P markers at wrong positions */
+    for (int i = 0; i < BCD_FRAME_LENGTH; i++) {
+        if (f[i] == BCD_SYMBOL_MARKER && !is_p_marker_position(i)) {
             markers_found++;
         }
     }
     
     if (quality_out) {
+        quality_out->symbols_received = dec->symbols_in_frame;
         quality_out->markers_found = markers_found;
-        quality_out->symbols_received = dec->frame_symbol_count;
-        quality_out->avg_snr_db = dec->frame_snr_sum / 
-                                  (dec->frame_symbol_count > 0 ? dec->frame_symbol_count : 1);
-        quality_out->min_snr_db = dec->frame_snr_min;
-        quality_out->bit_errors = 0;
+        quality_out->markers_correct = markers_correct;
+        quality_out->frame_coverage = (float)dec->symbols_in_frame / BCD_FRAME_LENGTH * 100.0f;
     }
     
-    /* Need at least 5 of 7 P markers for valid frame */
-    if (markers_found < 5) {
+    /* Need at least 5 of 7 P markers at correct positions */
+    if (markers_correct < 5) {
+        LOG_WARN("[BCD] Frame decode failed: only %d/%d P markers correct (found %d total)",
+               markers_correct, NUM_P_MARKERS, markers_found);
+        
+        /* Dump frame for diagnosis */
+        char frame_str[180];
+        char* p = frame_str;
+        for (int i = 0; i < BCD_FRAME_LENGTH; i++) {
+            if (i > 0 && i % 10 == 0) *p++ = ' ';
+            switch (f[i]) {
+                case BCD_SYMBOL_ZERO:   *p++ = '0'; break;
+                case BCD_SYMBOL_ONE:    *p++ = '1'; break;
+                case BCD_SYMBOL_MARKER: *p++ = 'P'; break;
+                default:                *p++ = '.'; break;
+            }
+        }
+        *p = '\0';
+        LOG_INFO("[BCD] Frame: %s", frame_str);
+        LOG_INFO("[BCD] Expect P at: 0,9,19,29,39,49,59");
+        
+        /* Show where P markers actually are */
+        char p_pos_str[64] = "P found at:";
+        for (int i = 0; i < BCD_FRAME_LENGTH; i++) {
+            if (f[i] == BCD_SYMBOL_MARKER) {
+                char tmp[8];
+                snprintf(tmp, sizeof(tmp), " %d", i);
+                strcat(p_pos_str, tmp);
+            }
+        }
+        LOG_INFO("[BCD] %s", p_pos_str);
+        
         return false;
     }
     
     /* Decode minutes: seconds 1-8 */
-    /* Bit weights: 40, 20, 10, 0, 8, 4, 2, 1 */
     static const int min_weights[] = {40, 20, 10, 0, 8, 4, 2, 1};
     int minutes = decode_bcd_field(&f[1], min_weights, 8);
     if (minutes < 0 || minutes > 59) {
-        if (quality_out) quality_out->bit_errors++;
+        LOG_WARN("[BCD] Invalid minutes: %d (fields 1-8: %d%d%d%d %d%d%d%d)",
+                minutes, f[1], f[2], f[3], f[4], f[5], f[6], f[7], f[8]);
         return false;
     }
     
     /* Decode hours: seconds 12-18 */
-    /* Bit weights: 20, 10, 0, 8, 4, 2, 1 (seconds 10-11 unused) */
     static const int hour_weights[] = {20, 10, 0, 8, 4, 2, 1};
     int hours = decode_bcd_field(&f[12], hour_weights, 7);
     if (hours < 0 || hours > 23) {
-        if (quality_out) quality_out->bit_errors++;
+        LOG_WARN("[BCD] Invalid hours: %d (fields 12-18: %d%d%d %d%d%d%d)",
+                hours, f[12], f[13], f[14], f[15], f[16], f[17], f[18]);
         return false;
     }
     
     /* Decode day of year: seconds 22-28 (hundreds/tens), 30-33 (units) */
-    /* Hundreds/tens: 200, 100, 0, 80, 40, 20, 10 */
     static const int doy_ht_weights[] = {200, 100, 0, 80, 40, 20, 10};
     int doy_ht = decode_bcd_field(&f[22], doy_ht_weights, 7);
     
-    /* Units: 8, 4, 2, 1 */
     static const int doy_u_weights[] = {8, 4, 2, 1};
     int doy_u = decode_bcd_field(&f[30], doy_u_weights, 4);
     
-    int day_of_year = doy_ht + doy_u;
+    int day_of_year = (doy_ht >= 0 && doy_u >= 0) ? doy_ht + doy_u : -1;
     if (day_of_year < 1 || day_of_year > 366) {
-        if (quality_out) quality_out->bit_errors++;
+        LOG_WARN("[BCD] Invalid DOY: %d (ht=%d, u=%d)", day_of_year, doy_ht, doy_u);
         return false;
     }
     
-    /* Decode DUT1 sign: seconds 35-37 (+, +, -) */
+    /* Decode DUT1 sign: seconds 35-37 */
     int dut1_sign = 0;
     if (f[35] == BCD_SYMBOL_ONE || f[36] == BCD_SYMBOL_ONE) {
-        dut1_sign = 1;  /* Positive */
+        dut1_sign = 1;
     }
     if (f[37] == BCD_SYMBOL_ONE) {
-        dut1_sign = -1;  /* Negative (overrides positive) */
+        dut1_sign = -1;
     }
     
-    /* Decode DUT1 magnitude: seconds 40-43 (0.8, 0.4, 0.2, 0.1) */
+    /* Decode DUT1 magnitude: seconds 40-43 */
     float dut1_value = 0.0f;
     if (f[40] == BCD_SYMBOL_ONE) dut1_value += 0.8f;
     if (f[41] == BCD_SYMBOL_ONE) dut1_value += 0.4f;
     if (f[42] == BCD_SYMBOL_ONE) dut1_value += 0.2f;
     if (f[43] == BCD_SYMBOL_ONE) dut1_value += 0.1f;
     
-    /* Decode year: seconds 51-58 (80, 40, 20, 10, 8, 4, 2, 1) */
+    /* Decode year: seconds 51-58 */
     static const int year_weights[] = {80, 40, 20, 10, 8, 4, 2, 1};
     int year = decode_bcd_field(&f[51], year_weights, 8);
     if (year < 0 || year > 99) {
         year = -1;  /* Invalid but don't fail decode */
     }
     
-    /* Leap second warning: second 56 (bit 2 of year, but also LS warning) */
-    /* DST warning: seconds 57-58 */
-    bool leap_second_pending = false;  /* Would need separate bit check */
-    bool dst_pending = false;
-    
-    /* Fill output structure */
+    /* Fill output */
     time_out->valid = true;
     time_out->hours = hours;
     time_out->minutes = minutes;
@@ -320,126 +224,22 @@ static bool decode_frame(bcd_decoder_t *dec, bcd_time_t *time_out,
     time_out->year = year;
     time_out->dut1_sign = dut1_sign;
     time_out->dut1_value = dut1_value;
-    time_out->leap_second_pending = leap_second_pending;
-    time_out->dst_pending = dst_pending;
-    time_out->decode_timestamp_ms = dec->last_timestamp_ms;
+    time_out->leap_second_pending = false;
+    time_out->dst_pending = false;
+    time_out->decode_timestamp_ms = dec->last_symbol_timestamp_ms;
     
     return true;
 }
 
 /**
- * Process a newly received symbol
+ * Clear frame buffer for new frame
  */
-static void process_symbol(bcd_decoder_t *dec, bcd_symbol_t symbol,
-                           float timestamp_ms, float width_ms, float snr_db) {
-    /* Store in history buffer */
-    store_symbol(dec, symbol, timestamp_ms, width_ms);
-    
-    /* Fire symbol callback */
-    if (dec->symbol_callback) {
-        dec->symbol_callback(symbol, dec->frame_position, width_ms, 
-                            dec->symbol_callback_data);
+static void clear_frame(bcd_decoder_t *dec) {
+    for (int i = 0; i < BCD_FRAME_LENGTH; i++) {
+        dec->frame[i] = BCD_SYMBOL_NONE;
     }
-    
-    /* State machine */
-    switch (dec->sync_state) {
-        case BCD_SYNC_SEARCHING:
-            /* Look for P marker pattern */
-            if (symbol == BCD_SYMBOL_MARKER) {
-                int sync_offset = find_sync_pattern(dec);
-                if (sync_offset >= 0) {
-                    /* Found pattern - determine frame position */
-                    /* The most recent symbol is a P marker */
-                    /* Need to figure out which one (P0-P6) */
-                    
-                    /* For now, assume it's P0 and start fresh */
-                    dec->sync_state = BCD_SYNC_CONFIRMING;
-                    dec->frame_position = 0;
-                    dec->sync_confidence = 0;
-                    
-                    /* Initialize frame buffer */
-                    memset(dec->frame, BCD_SYMBOL_NONE, sizeof(dec->frame));
-                    dec->frame[0] = symbol;
-                    dec->frame_symbol_count = 1;
-                    dec->frame_snr_sum = snr_db;
-                    dec->frame_snr_min = snr_db;
-                    
-                    printf("[bcd_decoder] Sync pattern found, confirming...\n");
-                }
-            }
-            break;
-            
-        case BCD_SYNC_CONFIRMING:
-        case BCD_SYNC_LOCKED:
-            /* Advance frame position */
-            dec->frame_position = (dec->frame_position + 1) % BCD_FRAME_LENGTH;
-            
-            /* Store symbol in frame */
-            dec->frame[dec->frame_position] = symbol;
-            dec->frame_symbol_count++;
-            dec->frame_snr_sum += snr_db;
-            if (snr_db < dec->frame_snr_min) dec->frame_snr_min = snr_db;
-            
-            /* Check P marker alignment */
-            bool expect_marker = is_p_marker_position(dec->frame_position);
-            bool got_marker = (symbol == BCD_SYMBOL_MARKER);
-            
-            if (expect_marker && !got_marker) {
-                dec->p_marker_miss_count++;
-                if (dec->p_marker_miss_count >= 3) {
-                    /* Lost sync */
-                    printf("[bcd_decoder] Lost sync (missed %d P markers)\n",
-                           dec->p_marker_miss_count);
-                    dec->sync_state = BCD_SYNC_SEARCHING;
-                    dec->frame_position = -1;
-                    dec->sync_confidence = 0;
-                }
-            } else if (expect_marker && got_marker) {
-                dec->p_marker_miss_count = 0;
-                dec->sync_confidence++;
-                
-                if (dec->sync_state == BCD_SYNC_CONFIRMING && 
-                    dec->sync_confidence >= BCD_SYNC_MARKERS_REQUIRED) {
-                    dec->sync_state = BCD_SYNC_LOCKED;
-                    printf("[bcd_decoder] Frame sync LOCKED\n");
-                }
-            }
-            
-            /* End of frame - attempt decode */
-            if (dec->frame_position == 59) {
-                bcd_time_t decoded_time;
-                bcd_frame_quality_t quality;
-                
-                if (decode_frame(dec, &decoded_time, &quality)) {
-                    dec->frames_decoded++;
-                    dec->last_time = decoded_time;
-                    dec->last_decode_timestamp_ms = dec->last_timestamp_ms;
-                    dec->p_markers_in_frame = quality.markers_found;
-                    
-                    printf("[bcd_decoder] Decoded: %02d:%02d DOY=%03d Year=%02d "
-                           "(DUT1=%+.1fs, markers=%d/%d)\n",
-                           decoded_time.hours, decoded_time.minutes,
-                           decoded_time.day_of_year, decoded_time.year,
-                           decoded_time.dut1_sign * decoded_time.dut1_value,
-                           quality.markers_found, NUM_P_MARKERS);
-                    
-                    if (dec->time_callback) {
-                        dec->time_callback(&decoded_time, &quality, 
-                                          dec->time_callback_data);
-                    }
-                } else {
-                    dec->frames_failed++;
-                    printf("[bcd_decoder] Frame decode failed\n");
-                }
-                
-                /* Reset for next frame */
-                memset(dec->frame, BCD_SYMBOL_NONE, sizeof(dec->frame));
-                dec->frame_symbol_count = 0;
-                dec->frame_snr_sum = 0;
-                dec->frame_snr_min = 100.0f;
-            }
-            break;
-    }
+    dec->symbols_in_frame = 0;
+    dec->p_markers_in_frame = 0;
 }
 
 /*============================================================================
@@ -450,170 +250,139 @@ bcd_decoder_t *bcd_decoder_create(void) {
     bcd_decoder_t *dec = calloc(1, sizeof(bcd_decoder_t));
     if (!dec) return NULL;
     
-    dec->sync_state = BCD_SYNC_SEARCHING;
-    dec->bcd1_packets = 0;
+    dec->sync_state = BCD_SYNC_WAITING;
     dec->frame_position = -1;
-    dec->first_sample = true;
-    dec->frame_snr_min = 100.0f;
-    dec->adaptive_threshold = BCD_SNR_THRESHOLD_ON;
+    dec->last_frame_position = -1;
+    dec->last_symbol = BCD_SYMBOL_NONE;
     
-    /* Initialize symbol buffer */
-    for (int i = 0; i < 120; i++) {
-        dec->symbol_buffer[i] = BCD_SYMBOL_NONE;
-    }
+    clear_frame(dec);
     
-    /* Initialize frame buffer */
-    for (int i = 0; i < BCD_FRAME_LENGTH; i++) {
-        dec->frame[i] = BCD_SYMBOL_NONE;
-    }
-    
-    printf("[bcd_decoder] Created, searching for sync...\n");
+    LOG_INFO("[BCD] Frame assembler created, waiting for minute sync");
     return dec;
 }
 
 void bcd_decoder_destroy(bcd_decoder_t *dec) {
     if (dec) {
+        if (dec->frames_decoded > 0 || dec->frames_failed > 0) {
+            LOG_INFO("[BCD] Final stats: %u decoded, %u failed, %u symbols",
+                   dec->frames_decoded, dec->frames_failed, dec->total_symbols);
+        }
         free(dec);
     }
 }
 
-void bcd_decoder_process_sample(bcd_decoder_t *dec,
+void bcd_decoder_process_symbol(bcd_decoder_t *dec,
+                                char symbol_char,
                                 float timestamp_ms,
-                                float envelope,
-                                float snr_db,
-                                bcd_status_t status) {
+                                float width_ms,
+                                bool sync_locked,
+                                float minute_anchor_ms) {
     if (!dec) return;
-    dec->bcd1_packets++;
     
-    /* Track timing */
-    if (dec->first_sample) {
-        dec->first_sample = false;
+    bcd_symbol_t symbol = char_to_symbol(symbol_char);
+    if (symbol == BCD_SYMBOL_NONE) return;
+    
+    dec->total_symbols++;
+    dec->last_symbol = symbol;
+    dec->last_symbol_width_ms = width_ms;
+    dec->last_symbol_timestamp_ms = timestamp_ms;
+    
+    /* Can't do anything without minute sync */
+    if (!sync_locked) {
+        if (dec->sync_state != BCD_SYNC_WAITING) {
+            LOG_WARN("[BCD] Lost minute sync, resetting");
+            dec->sync_state = BCD_SYNC_WAITING;
+            dec->frame_position = -1;
+            clear_frame(dec);
+        }
+        return;
     }
-    dec->last_timestamp_ms = timestamp_ms;
     
-    /* Track SNR for UI */
-    dec->current_snr_db = snr_db;
-    if (snr_db > dec->peak_snr_db) {
-        dec->peak_snr_db = snr_db;
+    /* Minute sync is locked - calculate frame position from timing */
+    float seconds_since_minute = (timestamp_ms - minute_anchor_ms) / 1000.0f;
+    
+    /* Handle wrap-around (symbol might be from previous minute) */
+    while (seconds_since_minute < 0) {
+        seconds_since_minute += 60.0f;
+    }
+    while (seconds_since_minute >= 60.0f) {
+        seconds_since_minute -= 60.0f;
     }
     
-    /* Hysteresis pulse detection */
-    bool signal_present = (status >= BCD_STATUS_PRESENT) || 
-                          (snr_db >= BCD_SNR_THRESHOLD_ON);
-    bool signal_gone = (status <= BCD_STATUS_WEAK) && 
-                       (snr_db < BCD_SNR_THRESHOLD_OFF);
+    int frame_pos = (int)roundf(seconds_since_minute);
+    if (frame_pos < 0) frame_pos = 0;
+    if (frame_pos >= BCD_FRAME_LENGTH) frame_pos = BCD_FRAME_LENGTH - 1;
     
-    if (!dec->in_pulse && signal_present) {
-        /* Rising edge - start of pulse */
-        dec->in_pulse = true;
-        dec->pulse_start_ms = timestamp_ms;
-        dec->pulse_snr_sum = snr_db;
-        dec->pulse_sample_count = 1;
-        
-    } else if (dec->in_pulse && signal_gone) {
-        /* Falling edge - end of pulse */
-        dec->in_pulse = false;
-        float pulse_width_ms = timestamp_ms - dec->pulse_start_ms;
-        float avg_snr = dec->pulse_snr_sum / dec->pulse_sample_count;
-        
-        /* Classify the pulse */
-        bcd_symbol_t symbol = classify_pulse(pulse_width_ms);
-        
-        if (symbol != BCD_SYMBOL_NONE) {
-            /* Track last symbol for UI */
-            dec->last_symbol = symbol;
-            dec->last_symbol_width_ms = pulse_width_ms;
+    /* Detect frame wrap (new minute) */
+    if (dec->sync_state != BCD_SYNC_WAITING) {
+        if (dec->last_frame_position >= 55 && frame_pos <= 5) {
+            /* Frame wrapped - attempt decode of previous frame */
+            LOG_INFO("[BCD] Frame complete (%d symbols, %d P markers)",
+                   dec->symbols_in_frame, dec->p_markers_in_frame);
             
-            process_symbol(dec, symbol, timestamp_ms, pulse_width_ms, avg_snr);
+            bcd_time_t decoded_time;
+            bcd_frame_quality_t quality;
+            
+            if (decode_frame(dec, &decoded_time, &quality)) {
+                dec->frames_decoded++;
+                dec->last_time = decoded_time;
+                dec->sync_state = BCD_SYNC_LOCKED;
+                
+                LOG_INFO("[BCD] DECODED: %02d:%02d DOY=%03d Year=%02d DUT1=%+.1fs",
+                       decoded_time.hours, decoded_time.minutes,
+                       decoded_time.day_of_year, decoded_time.year,
+                       decoded_time.dut1_sign * decoded_time.dut1_value);
+            } else {
+                dec->frames_failed++;
+                LOG_WARN("[BCD] Decode FAILED (coverage=%.0f%%, P correct=%d/%d)",
+                       quality.frame_coverage, quality.markers_correct, NUM_P_MARKERS);
+            }
+            
+            /* Clear for new frame */
+            clear_frame(dec);
         }
+    }
+    
+    /* Transition from WAITING to ACTIVE */
+    if (dec->sync_state == BCD_SYNC_WAITING) {
+        dec->sync_state = BCD_SYNC_ACTIVE;
+        LOG_INFO("[BCD] Minute sync acquired, assembling frame (start pos=%d, anchor=%.1fms)", 
+                 frame_pos, minute_anchor_ms);
+        clear_frame(dec);
+    }
+    
+    /* Store symbol in frame */
+    dec->frame[frame_pos] = symbol;
+    dec->symbols_in_frame++;
+    dec->frame_position = frame_pos;
+    dec->last_frame_position = frame_pos;
+    
+    if (symbol == BCD_SYMBOL_MARKER) {
+        dec->p_markers_in_frame++;
         
-    } else if (dec->in_pulse) {
-        /* Still in pulse - accumulate */
-        dec->pulse_snr_sum += snr_db;
-        dec->pulse_sample_count++;
-        
-        /* Timeout check - if pulse exceeds max, force end */
-        float current_width = timestamp_ms - dec->pulse_start_ms;
-        if (current_width > BCD_PULSE_MAX_MS + 200) {
-            /* Stuck high - reset */
-            dec->in_pulse = false;
+        /* Validate P marker position */
+        if (is_p_marker_position(frame_pos)) {
+            LOG_INFO("[BCD] P marker at pos %d (expected) - good", frame_pos);
+        } else {
+            LOG_WARN("[BCD] P marker at pos %d (UNEXPECTED - expect 0,9,19,29,39,49,59)", frame_pos);
         }
     }
-}
-
-bool bcd_decoder_process_message(bcd_decoder_t *dec, const char *message) {
-    if (!dec || !message) return false;
-    
-    /* Parse: BCD1,HH:MM:SS,timestamp_ms,envelope,snr_db,noise_floor_db,status */
-    char time_str[16];
-    float timestamp_ms, envelope, snr_db, noise_floor_db;
-    char status_str[16];
-    
-    int parsed = sscanf(message, "BCD1,%15[^,],%f,%f,%f,%f,%15s",
-                        time_str, &timestamp_ms, &envelope, 
-                        &snr_db, &noise_floor_db, status_str);
-    
-    if (parsed < 6) {
-        return false;  /* Invalid format */
-    }
-    
-    /* Convert status string to enum */
-    bcd_status_t status = BCD_STATUS_ABSENT;
-    if (strcmp(status_str, "WEAK") == 0) {
-        status = BCD_STATUS_WEAK;
-    } else if (strcmp(status_str, "PRESENT") == 0) {
-        status = BCD_STATUS_PRESENT;
-    } else if (strcmp(status_str, "STRONG") == 0) {
-        status = BCD_STATUS_STRONG;
-    }
-    
-    /* Track noise floor for UI */
-    dec->noise_floor_db = noise_floor_db;
-    
-    /* Process the sample */
-    bcd_decoder_process_sample(dec, timestamp_ms, envelope, snr_db, status);
-    return true;
-}
-
-void bcd_decoder_set_time_callback(bcd_decoder_t *dec,
-                                   bcd_time_callback_fn callback,
-                                   void *user_data) {
-    if (!dec) return;
-    dec->time_callback = callback;
-    dec->time_callback_data = user_data;
-}
-
-void bcd_decoder_set_symbol_callback(bcd_decoder_t *dec,
-                                     bcd_symbol_callback_fn callback,
-                                     void *user_data) {
-    if (!dec) return;
-    dec->symbol_callback = callback;
-    dec->symbol_callback_data = user_data;
 }
 
 void bcd_decoder_reset(bcd_decoder_t *dec) {
     if (!dec) return;
     
-    dec->sync_state = BCD_SYNC_SEARCHING;
+    dec->sync_state = BCD_SYNC_WAITING;
     dec->frame_position = -1;
-    dec->in_pulse = false;
-    dec->sync_confidence = 0;
-    dec->p_marker_miss_count = 0;
-    dec->symbol_write_idx = 0;
-    dec->symbol_count = 0;
+    dec->last_frame_position = -1;
+    dec->last_symbol = BCD_SYMBOL_NONE;
+    clear_frame(dec);
     
-    for (int i = 0; i < 120; i++) {
-        dec->symbol_buffer[i] = BCD_SYMBOL_NONE;
-    }
-    for (int i = 0; i < BCD_FRAME_LENGTH; i++) {
-        dec->frame[i] = BCD_SYMBOL_NONE;
-    }
-    
-    printf("[bcd_decoder] Reset, searching for sync...\n");
+    LOG_INFO("[BCD] Reset, waiting for minute sync");
 }
 
 bcd_sync_state_t bcd_decoder_get_sync_state(bcd_decoder_t *dec) {
-    return dec ? dec->sync_state : BCD_SYNC_SEARCHING;
+    return dec ? dec->sync_state : BCD_SYNC_WAITING;
 }
 
 int bcd_decoder_get_frame_position(bcd_decoder_t *dec) {
@@ -634,108 +403,29 @@ void bcd_decoder_get_stats(bcd_decoder_t *dec,
     if (total_symbols) *total_symbols = dec->total_symbols;
 }
 
-bool bcd_decoder_is_in_pulse(bcd_decoder_t *dec) {
-    return dec ? dec->in_pulse : false;
-}
-
-uint32_t bcd_decoder_get_bcd1_packets(const bcd_decoder_t* dec) {
-    return dec ? dec->bcd1_packets : 0;
-}
-
 void bcd_decoder_get_ui_status(bcd_decoder_t *dec, bcd_ui_status_t *status) {
     if (!status) return;
     memset(status, 0, sizeof(*status));
     
     if (!dec) {
-        status->state = BCD_STATE_NO_SIGNAL;
+        status->sync_state = BCD_SYNC_WAITING;
         status->frame_position = -1;
         status->last_symbol = BCD_SYMBOL_NONE;
         return;
     }
     
-    /* Determine UI state based on current conditions */
-    if (dec->current_snr_db < 1.0f) {
-        status->state = BCD_STATE_NO_SIGNAL;
-    } else if (dec->current_snr_db < BCD_SNR_THRESHOLD_ON) {
-        status->state = BCD_STATE_SIGNAL_WEAK;
-    } else if (dec->in_pulse) {
-        status->state = BCD_STATE_PULSE_ACTIVE;
-    } else if (dec->sync_state == BCD_SYNC_LOCKED) {
-        if (dec->last_time.valid) {
-            if (dec->frames_decoded >= 2) {
-                status->state = BCD_STATE_TIME_CONFIRMED;
-            } else {
-                status->state = BCD_STATE_TIME_TENTATIVE;
-            }
-        } else {
-            status->state = BCD_STATE_DECODING;
-        }
-    } else if (dec->sync_state == BCD_SYNC_CONFIRMING) {
-        status->state = BCD_STATE_SYNC_CONFIRMING;
-    } else if (dec->current_snr_db >= 12.0f) {
-        status->state = BCD_STATE_SIGNAL_STRONG;
-    } else {
-        status->state = BCD_STATE_SIGNAL_GOOD;
-    }
-    
-    /* Signal quality */
-    status->current_snr_db = dec->current_snr_db;
-    status->peak_snr_db = dec->peak_snr_db;
-    status->noise_floor_db = dec->noise_floor_db;
-    
-    /* Pulse info */
-    status->in_pulse = dec->in_pulse;
-    if (dec->in_pulse) {
-        status->current_pulse_width_ms = dec->last_timestamp_ms - dec->pulse_start_ms;
-    }
+    status->sync_state = dec->sync_state;
+    status->frame_position = dec->frame_position;
     status->last_symbol = dec->last_symbol;
     status->last_symbol_width_ms = dec->last_symbol_width_ms;
-    
-    /* Sync progress */
+    status->last_symbol_timestamp_ms = dec->last_symbol_timestamp_ms;
+    status->symbols_in_frame = dec->symbols_in_frame;
     status->p_markers_found = dec->p_markers_in_frame;
-    status->frame_position = dec->frame_position;
-    status->sync_confidence = dec->sync_confidence;
-    
-    /* Decode stats */
-    status->bcd1_packets = dec->bcd1_packets;
-    status->frames_attempted = dec->frames_decoded + dec->frames_failed;
     status->frames_decoded = dec->frames_decoded;
     status->frames_failed = dec->frames_failed;
-    if (status->frames_attempted > 0) {
-        status->decode_success_rate = 100.0f * dec->frames_decoded / status->frames_attempted;
-    }
-    
-    /* Timing */
-    if (dec->last_decode_timestamp_ms > 0 && dec->last_timestamp_ms > 0) {
-        status->seconds_since_last_decode = (dec->last_timestamp_ms - dec->last_decode_timestamp_ms) / 1000.0f;
-    }
-    
-    /* Current time */
+    status->total_symbols = dec->total_symbols;
     status->time_valid = dec->last_time.valid;
     if (dec->last_time.valid) {
         status->current_time = dec->last_time;
-    }
-}
-
-void bcd_decoder_print_status(bcd_decoder_t *dec) {
-    if (!dec) return;
-    
-    const char *sync_str;
-    switch (dec->sync_state) {
-        case BCD_SYNC_SEARCHING:  sync_str = "SEARCHING";  break;
-        case BCD_SYNC_CONFIRMING: sync_str = "CONFIRMING"; break;
-        case BCD_SYNC_LOCKED:     sync_str = "LOCKED";     break;
-        default: sync_str = "UNKNOWN";
-    }
-    
-    printf("[bcd_decoder] Sync: %s, Frame pos: %d, Symbols: %u, "
-           "Decoded: %u, Failed: %u\n",
-           sync_str, dec->frame_position, dec->total_symbols,
-           dec->frames_decoded, dec->frames_failed);
-    
-    if (dec->last_time.valid) {
-        printf("[bcd_decoder] Last time: %02d:%02d DOY=%03d Year=%02d\n",
-               dec->last_time.hours, dec->last_time.minutes,
-               dec->last_time.day_of_year, dec->last_time.year);
     }
 }

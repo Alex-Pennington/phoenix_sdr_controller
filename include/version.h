@@ -11,20 +11,20 @@
 #define VERSION_H
 
 #define VERSION_MAJOR       0
-#define VERSION_MINOR       4
+#define VERSION_MINOR       6
 #define VERSION_PATCH       1
-#define VERSION_BUILD       2
+#define VERSION_BUILD       3
 
 /* Version string for display: "0.3.0" */
-#define VERSION_STRING      "0.4.1"
+#define VERSION_STRING      "0.6.1"
 
 /* Full version with build info: "0.3.0+67.abc1234" */
-#define VERSION_FULL        "0.4.1+2.09031e2"
+#define VERSION_FULL        "0.6.1+3.b7c8007-dirty"
 
 /* Git commit hash (short) */
-#define VERSION_COMMIT      "09031e2"
+#define VERSION_COMMIT      "b7c8007"
 
 /* true if there were uncommitted changes during build */
-#define VERSION_DIRTY       false
+#define VERSION_DIRTY       true
 
 #endif /* VERSION_H */

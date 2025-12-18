@@ -124,39 +124,35 @@ int main(int argc, char* argv[])
             udp_telemetry_poll(app.telemetry);
             ui_layout_sync_telemetry(app.layout, app.telemetry);
             
-            /* Feed BCD1 data to decoder when NEW data arrives */
-            if (app.bcd_decoder && app.telemetry->bcd100.valid &&
-                app.telemetry->bcd100.last_update != app.last_bcd_update) {
+            /* Feed BCD symbols to frame assembler when NEW symbols arrive */
+            if (app.bcd_decoder && app.telemetry->bcds.valid &&
+                app.telemetry->bcds.last_update != app.last_bcd_update) {
                 
-                /* Debug: log first BCD1 packet */
-                static bool first_bcd = true;
-                if (first_bcd) {
-                    LOG_INFO("First BCD1 packet: env=%.2f snr=%.1f status=%s",
-                             app.telemetry->bcd100.envelope,
-                             app.telemetry->bcd100.snr_db,
-                             app.telemetry->bcd100.status);
-                    first_bcd = false;
+                app.last_bcd_update = app.telemetry->bcds.last_update;
+                
+                /* Only process if we have a symbol (not just STATUS update) */
+                if (app.telemetry->bcds.last_symbol != 0) {
+                    /* Debug: log first symbol */
+                    static bool first_sym = true;
+                    if (first_sym) {
+                        LOG_INFO("First BCD symbol: %c width=%.1fms ts=%.1f",
+                                 app.telemetry->bcds.last_symbol,
+                                 app.telemetry->bcds.last_symbol_width_ms,
+                                 app.telemetry->bcds.last_symbol_timestamp_ms);
+                        first_sym = false;
+                    }
+                    
+                    /* Feed symbol to frame assembler with sync timing */
+                    bool sync_locked = (app.telemetry->sync.state == SYNC_LOCKED);
+                    float minute_anchor = app.telemetry->sync.last_confirmed_ms;
+                    
+                    bcd_decoder_process_symbol(app.bcd_decoder,
+                        app.telemetry->bcds.last_symbol,
+                        app.telemetry->bcds.last_symbol_timestamp_ms,
+                        app.telemetry->bcds.last_symbol_width_ms,
+                        sync_locked,
+                        minute_anchor);
                 }
-                
-                app.last_bcd_update = app.telemetry->bcd100.last_update;
-                
-                /* Convert status string to enum */
-                bcd_status_t status = BCD_STATUS_ABSENT;
-                const char* status_str = app.telemetry->bcd100.status;
-                if (strcmp(status_str, "WEAK") == 0) {
-                    status = BCD_STATUS_WEAK;
-                } else if (strcmp(status_str, "PRESENT") == 0) {
-                    status = BCD_STATUS_PRESENT;
-                } else if (strcmp(status_str, "STRONG") == 0) {
-                    status = BCD_STATUS_STRONG;
-                }
-                
-                /* Feed sample to decoder */
-                bcd_decoder_process_sample(app.bcd_decoder,
-                    (float)app.telemetry->bcd100.last_update,
-                    app.telemetry->bcd100.envelope,
-                    app.telemetry->bcd100.snr_db,
-                    status);
             }
             
             /* Feed SYNC data to AFF when available */
@@ -205,13 +201,8 @@ int main(int argc, char* argv[])
             ui_layout_draw_wwv_panel(app.layout, app.telemetry);
         }
         
-        /* Draw BCD time code panel 
-         * Prefer modem BCDS data if available, otherwise use local decoder */
-        if (app.telemetry && app.telemetry->bcds.valid) {
-            /* Use modem-decoded BCD data */
-            ui_layout_draw_bcd_panel_from_telem(app.layout, app.telemetry);
-        } else if (app.bcd_decoder) {
-            /* Fall back to local decoder */
+        /* Draw BCD time code panel - use local frame assembler */
+        if (app.bcd_decoder) {
             ui_layout_sync_bcd(app.layout, app.bcd_decoder);
             ui_layout_draw_bcd_panel(app.layout, app.bcd_decoder);
         }

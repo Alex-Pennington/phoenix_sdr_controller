@@ -1,13 +1,13 @@
 /**
  * @file bcd_decoder.h
- * @brief WWV BCD Time Code Decoder
+ * @brief WWV BCD Frame Assembler and Decoder (Controller Side)
  *
- * Processes BCD1 messages from the subcarrier detector to decode
- * WWV/WWVH time code. Implements pulse width measurement, frame
- * synchronization, and BCD decoding per the algorithm specification.
+ * Receives pre-detected symbols from modem with timestamps.
+ * Uses minute sync timing to calculate frame position.
+ * Assembles 60-symbol frames and decodes BCD time.
  *
- * Input: BCD1 protocol messages (100 Hz envelope at 10ms resolution)
- * Output: Decoded UTC time (hours, minutes, day of year, year)
+ * Input: Symbols from BCDS,SYM telemetry + sync timing from SYNC telemetry
+ * Output: Decoded UTC time
  */
 
 #ifndef BCD_DECODER_H
@@ -24,20 +24,8 @@ extern "C" {
  * Configuration
  *============================================================================*/
 
-/* Pulse width thresholds (milliseconds) */
-#define BCD_PULSE_MIN_MS            100     /* Ignore pulses shorter than this */
-#define BCD_PULSE_MAX_MS            1000    /* Ignore pulses longer than this */
-#define BCD_PULSE_ZERO_MAX_MS       350     /* 0-350ms = binary 0 */
-#define BCD_PULSE_ONE_MAX_MS        650     /* 350-650ms = binary 1 */
-                                            /* 650-1000ms = position marker */
-
-/* Hysteresis thresholds (SNR in dB) */
-#define BCD_SNR_THRESHOLD_ON        6.0f    /* Pulse ON threshold */
-#define BCD_SNR_THRESHOLD_OFF       3.0f    /* Pulse OFF threshold (hysteresis) */
-
 /* Frame parameters */
 #define BCD_FRAME_LENGTH            60      /* Symbols per frame */
-#define BCD_SYNC_MARKERS_REQUIRED   3       /* P markers needed for sync */
 
 /* Position marker locations within frame */
 #define BCD_P0_SECOND               0
@@ -52,7 +40,7 @@ extern "C" {
  * Types
  *============================================================================*/
 
-/** Symbol types */
+/** Symbol types (must match modem) */
 typedef enum {
     BCD_SYMBOL_NONE = -1,       /* No symbol yet */
     BCD_SYMBOL_ZERO = 0,        /* Binary 0 (~200ms pulse) */
@@ -62,48 +50,10 @@ typedef enum {
 
 /** Decoder sync state */
 typedef enum {
-    BCD_SYNC_SEARCHING,         /* Looking for P marker pattern */
-    BCD_SYNC_CONFIRMING,        /* Found pattern, confirming */
-    BCD_SYNC_LOCKED             /* Frame sync achieved */
+    BCD_SYNC_WAITING,           /* Waiting for minute sync lock */
+    BCD_SYNC_ACTIVE,            /* Minute sync locked, assembling frame */
+    BCD_SYNC_LOCKED             /* Frame validated, decoding */
 } bcd_sync_state_t;
-
-/** Decoder state for UI feedback */
-typedef enum {
-    /* Signal acquisition */
-    BCD_STATE_NO_SIGNAL,        /* No 100 Hz detected */
-    BCD_STATE_SIGNAL_WEAK,      /* 100 Hz present but SNR < 6 dB */
-    BCD_STATE_SIGNAL_GOOD,      /* SNR 6-12 dB, pulses visible */
-    BCD_STATE_SIGNAL_STRONG,    /* SNR > 12 dB, clean pulses */
-    
-    /* Pulse detection */
-    BCD_STATE_DETECTING_PULSES, /* Seeing ON/OFF transitions */
-    BCD_STATE_PULSE_ACTIVE,     /* Currently in a pulse */
-    
-    /* Frame sync */
-    BCD_STATE_SYNC_SEARCHING,   /* Looking for P marker pattern */
-    BCD_STATE_SYNC_CANDIDATE,   /* Found potential pattern */
-    BCD_STATE_SYNC_CONFIRMING,  /* Verifying P marker alignment */
-    BCD_STATE_SYNC_LOCKED,      /* Frame sync achieved */
-    BCD_STATE_SYNC_LOST,        /* Was locked, lost alignment */
-    
-    /* Decode status */
-    BCD_STATE_DECODING,         /* Receiving frame data */
-    BCD_STATE_DECODE_SUCCESS,   /* Frame decoded successfully */
-    BCD_STATE_DECODE_FAILED,    /* Frame failed validation */
-    
-    /* Time output */
-    BCD_STATE_TIME_TENTATIVE,   /* First decode, unconfirmed */
-    BCD_STATE_TIME_CONFIRMED,   /* Multiple frames agree */
-    BCD_STATE_TIME_VALID        /* High confidence output */
-} bcd_decoder_state_t;
-
-/** Subcarrier status (from BCD1 message) */
-typedef enum {
-    BCD_STATUS_ABSENT = 0,
-    BCD_STATUS_WEAK,
-    BCD_STATUS_PRESENT,
-    BCD_STATUS_STRONG
-} bcd_status_t;
 
 /** Decoded time structure */
 typedef struct {
@@ -123,52 +73,28 @@ typedef struct {
 typedef struct {
     int symbols_received;       /* Total symbols in frame */
     int markers_found;          /* Position markers detected */
-    int bit_errors;             /* Symbols that failed validation */
-    float avg_snr_db;           /* Average SNR during frame */
-    float min_snr_db;           /* Minimum SNR during frame */
+    int markers_correct;        /* P markers at correct positions */
+    float frame_coverage;       /* % of frame positions filled */
 } bcd_frame_quality_t;
-
-/** Callback for decoded time */
-typedef void (*bcd_time_callback_fn)(const bcd_time_t *time,
-                                     const bcd_frame_quality_t *quality,
-                                     void *user_data);
-
-/** Callback for symbol events (for debugging/display) */
-typedef void (*bcd_symbol_callback_fn)(bcd_symbol_t symbol,
-                                       int frame_position,
-                                       float pulse_width_ms,
-                                       void *user_data);
 
 /** Comprehensive status structure for UI */
 typedef struct {
-    bcd_decoder_state_t state;      /* Current decoder state */
+    bcd_sync_state_t sync_state;    /* Current sync state */
+    int frame_position;             /* Current position (0-59), or -1 */
     
-    /* Signal quality */
-    float current_snr_db;           /* Latest SNR reading */
-    float peak_snr_db;              /* Peak SNR in current frame */
-    float noise_floor_db;           /* Estimated noise floor */
-    
-    /* Pulse info */
-    bool in_pulse;                  /* Currently in a pulse */
-    float current_pulse_width_ms;   /* Width so far if in_pulse */
+    /* Last symbol info */
     bcd_symbol_t last_symbol;       /* Most recent symbol */
     float last_symbol_width_ms;     /* Width of last symbol */
+    float last_symbol_timestamp_ms; /* When last symbol arrived */
     
-    /* Sync progress */
-    int p_markers_found;            /* Out of 7 in frame */
-    int frame_position;             /* 0-59, or -1 if not synced */
-    int sync_confidence;            /* Consecutive good P markers */
+    /* Frame stats */
+    int symbols_in_frame;           /* Symbols received this frame */
+    int p_markers_found;            /* P markers in current frame */
     
     /* Decode stats */
-    uint32_t bcd1_packets;          /* Total BCD1 packets received */
-    uint32_t frames_attempted;      /* Total frames started */
     uint32_t frames_decoded;        /* Successfully decoded */
     uint32_t frames_failed;         /* Failed decode */
-    float decode_success_rate;      /* % success */
-    
-    /* Timing */
-    float seconds_since_last_decode;
-    float estimated_accuracy_ms;
+    uint32_t total_symbols;         /* All symbols received */
     
     /* Current time (if valid) */
     bool time_valid;
@@ -178,73 +104,41 @@ typedef struct {
 /** Opaque decoder state */
 typedef struct bcd_decoder bcd_decoder_t;
 
-/* Expose BCD1 packet count for UI */
-uint32_t bcd_decoder_get_bcd1_packets(const bcd_decoder_t* dec);
-
 /*============================================================================
  * Public API
  *============================================================================*/
 
 /**
- * Create a new BCD decoder instance
- * @return Decoder instance or NULL on failure
+ * Create a new BCD frame assembler
  */
 bcd_decoder_t *bcd_decoder_create(void);
 
 /**
- * Destroy a BCD decoder instance
+ * Destroy a BCD frame assembler
  */
 void bcd_decoder_destroy(bcd_decoder_t *dec);
 
 /**
- * Process a BCD1 protocol message
- * 
- * Parses the message and feeds data to the decoder state machine.
- * Format: "BCD1,HH:MM:SS,timestamp_ms,envelope,snr_db,noise_floor_db,status\n"
+ * Process a symbol from the modem
  *
- * @param dec       Decoder instance
- * @param message   Null-terminated BCD1 message string
- * @return          true if message was valid and processed
+ * @param dec               Decoder instance
+ * @param symbol            Symbol type ('0', '1', 'P')
+ * @param timestamp_ms      Modem timestamp when symbol was detected
+ * @param width_ms          Pulse width in milliseconds
+ * @param sync_locked       true if minute sync is LOCKED
+ * @param minute_anchor_ms  Timestamp of last confirmed minute boundary
  */
-bool bcd_decoder_process_message(bcd_decoder_t *dec, const char *message);
-
-/**
- * Process raw envelope data directly (alternative to message parsing)
- *
- * @param dec           Decoder instance
- * @param timestamp_ms  Milliseconds since start
- * @param envelope      100 Hz envelope magnitude (linear)
- * @param snr_db        Signal-to-noise ratio in dB
- * @param status        Subcarrier status
- */
-void bcd_decoder_process_sample(bcd_decoder_t *dec,
+void bcd_decoder_process_symbol(bcd_decoder_t *dec,
+                                char symbol,
                                 float timestamp_ms,
-                                float envelope,
-                                float snr_db,
-                                bcd_status_t status);
+                                float width_ms,
+                                bool sync_locked,
+                                float minute_anchor_ms);
 
 /**
- * Set callback for decoded time events
- */
-void bcd_decoder_set_time_callback(bcd_decoder_t *dec,
-                                   bcd_time_callback_fn callback,
-                                   void *user_data);
-
-/**
- * Set callback for symbol events (debugging)
- */
-void bcd_decoder_set_symbol_callback(bcd_decoder_t *dec,
-                                     bcd_symbol_callback_fn callback,
-                                     void *user_data);
-
-/**
- * Reset decoder state (clear frame buffer, lose sync)
+ * Reset decoder state
  */
 void bcd_decoder_reset(bcd_decoder_t *dec);
-
-/*============================================================================
- * Status Getters
- *============================================================================*/
 
 /**
  * Get current sync state
@@ -257,7 +151,7 @@ bcd_sync_state_t bcd_decoder_get_sync_state(bcd_decoder_t *dec);
 int bcd_decoder_get_frame_position(bcd_decoder_t *dec);
 
 /**
- * Get most recent decoded time (may not be valid)
+ * Get most recent decoded time
  */
 const bcd_time_t *bcd_decoder_get_last_time(bcd_decoder_t *dec);
 
@@ -270,19 +164,9 @@ void bcd_decoder_get_stats(bcd_decoder_t *dec,
                            uint32_t *total_symbols);
 
 /**
- * Check if currently in a pulse
- */
-bool bcd_decoder_is_in_pulse(bcd_decoder_t *dec);
-
-/**
- * Get comprehensive UI status (fills all fields for display)
+ * Get comprehensive UI status
  */
 void bcd_decoder_get_ui_status(bcd_decoder_t *dec, bcd_ui_status_t *status);
-
-/**
- * Print decoder status to stdout
- */
-void bcd_decoder_print_status(bcd_decoder_t *dec);
 
 #ifdef __cplusplus
 }
