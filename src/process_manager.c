@@ -124,6 +124,12 @@ bool process_manager_init(process_manager_t *pm) {
     process_manager_configure(pm, PROC_WATERFALL,
                               "Waterfall", "D:\\claude_sandbox\\phoenix_sdr\\bin\\waterfall.exe", "--tcp localhost:4536", true);
     
+    /* Waterfall window defaults */
+    pm->waterfall_cfg.width = 1024;
+    pm->waterfall_cfg.height = 600;
+    pm->waterfall_cfg.pos_x = -1;  /* -1 = use default positioning */
+    pm->waterfall_cfg.pos_y = -1;
+    
     pm->initialized = true;
     LOG_INFO("Process manager initialized");
     
@@ -187,6 +193,22 @@ bool process_manager_start(process_manager_t *pm, int index) {
     }
     
     child_process_t *child = &pm->children[index];
+    
+    /* Build waterfall args dynamically with window config */
+    char dynamic_args[PROCESS_ARGS_MAX];
+    if (index == PROC_WATERFALL) {
+        snprintf(dynamic_args, sizeof(dynamic_args), 
+                 "--tcp localhost:4536 -w %d -H %d",
+                 pm->waterfall_cfg.width, pm->waterfall_cfg.height);
+        if (pm->waterfall_cfg.pos_x >= 0 && pm->waterfall_cfg.pos_y >= 0) {
+            char pos_args[64];
+            snprintf(pos_args, sizeof(pos_args), " -x %d -y %d", 
+                     pm->waterfall_cfg.pos_x, pm->waterfall_cfg.pos_y);
+            strncat(dynamic_args, pos_args, sizeof(dynamic_args) - strlen(dynamic_args) - 1);
+        }
+        /* Temporarily use dynamic args */
+        strncpy(child->args, dynamic_args, PROCESS_ARGS_MAX - 1);
+    }
     
     LOG_INFO("Attempting to start: %s (path=%s, show_window=%d)", 
              child->name, child->path, child->show_window);
@@ -323,6 +345,16 @@ bool process_manager_load_config(process_manager_t *pm, const char *filename) {
                     strncpy(pm->children[PROC_WATERFALL].args, value, PROCESS_ARGS_MAX - 1);
                 } else if (strcmp(key, "waterfall_show_window") == 0) {
                     pm->children[PROC_WATERFALL].show_window = (atoi(value) != 0);
+                } else if (strcmp(key, "waterfall_width") == 0) {
+                    pm->waterfall_cfg.width = atoi(value);
+                    if (pm->waterfall_cfg.width < 400) pm->waterfall_cfg.width = 400;
+                } else if (strcmp(key, "waterfall_height") == 0) {
+                    pm->waterfall_cfg.height = atoi(value);
+                    if (pm->waterfall_cfg.height < 300) pm->waterfall_cfg.height = 300;
+                } else if (strcmp(key, "waterfall_pos_x") == 0) {
+                    pm->waterfall_cfg.pos_x = atoi(value);
+                } else if (strcmp(key, "waterfall_pos_y") == 0) {
+                    pm->waterfall_cfg.pos_y = atoi(value);
                 }
             }
         }
@@ -412,6 +444,10 @@ bool process_manager_save_config(process_manager_t *pm, const char *filename) {
     fprintf(f, "waterfall_path=%s\n", pm->children[PROC_WATERFALL].path);
     fprintf(f, "waterfall_args=%s\n", pm->children[PROC_WATERFALL].args);
     fprintf(f, "waterfall_show_window=%d\n", pm->children[PROC_WATERFALL].show_window ? 1 : 0);
+    fprintf(f, "waterfall_width=%d\n", pm->waterfall_cfg.width);
+    fprintf(f, "waterfall_height=%d\n", pm->waterfall_cfg.height);
+    fprintf(f, "waterfall_pos_x=%d\n", pm->waterfall_cfg.pos_x);
+    fprintf(f, "waterfall_pos_y=%d\n", pm->waterfall_cfg.pos_y);
     
     fclose(f);
     LOG_INFO("Saved process config to %s", filename);

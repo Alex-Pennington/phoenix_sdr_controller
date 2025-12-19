@@ -100,6 +100,14 @@ typedef struct {
     widget_button_t btn_server;     /* Start/Stop SDR Server */
     widget_button_t btn_waterfall;  /* Start/Stop Waterfall */
     
+    /* Waterfall config inputs (W x H @ X,Y) */
+    widget_button_t btn_wf_w_dec;
+    widget_button_t btn_wf_w_inc;
+    widget_button_t btn_wf_h_dec;
+    widget_button_t btn_wf_h_inc;
+    int wf_width;   /* Waterfall width for display */
+    int wf_height;  /* Waterfall height for display */
+    
     /* Status LEDs */
     widget_led_t led_connected;
     widget_led_t led_streaming;
@@ -164,6 +172,10 @@ typedef struct {
     bool preset_save;       /* true = save, false = recall */
     bool server_toggled;    /* Start/Stop SDR Server clicked */
     bool waterfall_toggled; /* Start/Stop Waterfall clicked */
+    bool wf_w_dec;          /* Waterfall width - */
+    bool wf_w_inc;          /* Waterfall width + */
+    bool wf_h_dec;          /* Waterfall height - */
+    bool wf_h_inc;          /* Waterfall height + */
     bool aff_toggled;       /* AFF enable toggle clicked */
     bool new_aff;           /* New AFF state */
     bool aff_interval_dec;  /* AFF interval - button clicked */

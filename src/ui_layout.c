@@ -143,6 +143,12 @@ ui_layout_t* ui_layout_create(ui_core_t* ui)
     widget_button_init(&layout->btn_server, 0, 0, 60, 24, "Server");
     widget_button_init(&layout->btn_waterfall, 0, 0, 60, 24, "Wfall");
     
+    /* Waterfall config buttons */
+    widget_button_init(&layout->btn_wf_w_dec, 0, 0, 18, 18, "-");
+    widget_button_init(&layout->btn_wf_w_inc, 0, 0, 18, 18, "+");
+    widget_button_init(&layout->btn_wf_h_dec, 0, 0, 18, 18, "-");
+    widget_button_init(&layout->btn_wf_h_inc, 0, 0, 18, 18, "+");
+    
     /* DC offset dot (positioned in recalculate) */
     layout->offset_dot.x = 0;
     layout->offset_dot.y = 0;
@@ -273,6 +279,30 @@ void ui_layout_recalculate(ui_layout_t* layout)
     
     layout->btn_waterfall.x = 272; layout->btn_waterfall.y = 123;
     layout->btn_waterfall.w = 52; layout->btn_waterfall.h = 22;
+    
+    /* Waterfall config buttons (to right of Wfall button) */
+    int wf_cfg_x = layout->btn_waterfall.x + layout->btn_waterfall.w + 8;
+    int wf_cfg_y = layout->btn_waterfall.y + 2;
+    
+    layout->btn_wf_w_dec.x = wf_cfg_x;
+    layout->btn_wf_w_dec.y = wf_cfg_y;
+    layout->btn_wf_w_dec.w = 18;
+    layout->btn_wf_w_dec.h = 18;
+    
+    layout->btn_wf_w_inc.x = wf_cfg_x + 58;
+    layout->btn_wf_w_inc.y = wf_cfg_y;
+    layout->btn_wf_w_inc.w = 18;
+    layout->btn_wf_w_inc.h = 18;
+    
+    layout->btn_wf_h_dec.x = wf_cfg_x + 86;
+    layout->btn_wf_h_dec.y = wf_cfg_y;
+    layout->btn_wf_h_dec.w = 18;
+    layout->btn_wf_h_dec.h = 18;
+    
+    layout->btn_wf_h_inc.x = wf_cfg_x + 144;
+    layout->btn_wf_h_inc.y = wf_cfg_y;
+    layout->btn_wf_h_inc.w = 18;
+    layout->btn_wf_h_inc.h = 18;
     
     /* Preset buttons */
     layout->btn_preset[0].x = 6; layout->btn_preset[0].y = 123;
@@ -441,6 +471,10 @@ void ui_layout_sync_process_state(ui_layout_t* layout, process_manager_t* pm)
     /* Update waterfall button label based on running state */
     bool wfall_running = process_manager_is_running(pm, PROC_WATERFALL);
     layout->btn_waterfall.label = wfall_running ? "Stop W" : "Wfall";
+    
+    /* Sync waterfall config for display */
+    layout->wf_width = pm->waterfall_cfg.width;
+    layout->wf_height = pm->waterfall_cfg.height;
 }
 
 /*
@@ -634,6 +668,20 @@ void ui_layout_update(ui_layout_t* layout, const mouse_state_t* mouse,
     if (widget_button_update(&layout->btn_waterfall, mouse)) {
         actions->waterfall_toggled = true;
     }
+    
+    /* Update waterfall config buttons */
+    if (widget_button_update(&layout->btn_wf_w_dec, mouse)) {
+        actions->wf_w_dec = true;
+    }
+    if (widget_button_update(&layout->btn_wf_w_inc, mouse)) {
+        actions->wf_w_inc = true;
+    }
+    if (widget_button_update(&layout->btn_wf_h_dec, mouse)) {
+        actions->wf_h_dec = true;
+    }
+    if (widget_button_update(&layout->btn_wf_h_inc, mouse)) {
+        actions->wf_h_inc = true;
+    }
 }
 
 /*
@@ -701,6 +749,25 @@ void ui_layout_draw(ui_layout_t* layout, const app_state_t* state)
     /* Draw external process buttons */
     widget_button_draw(&layout->btn_server, layout->ui);
     widget_button_draw(&layout->btn_waterfall, layout->ui);
+    
+    /* Draw waterfall config: W: - [value] + | H: - [value] + */
+    int wf_lbl_y = layout->btn_wf_w_dec.y + 3;
+    char wf_w_str[16], wf_h_str[16];
+    snprintf(wf_w_str, sizeof(wf_w_str), "%d", layout->wf_width);
+    snprintf(wf_h_str, sizeof(wf_h_str), "%d", layout->wf_height);
+    
+    widget_button_draw(&layout->btn_wf_w_dec, layout->ui);
+    ui_draw_text(layout->ui, layout->ui->font_small, wf_w_str,
+                 layout->btn_wf_w_dec.x + 20, wf_lbl_y, COLOR_TEXT);
+    widget_button_draw(&layout->btn_wf_w_inc, layout->ui);
+    
+    ui_draw_text(layout->ui, layout->ui->font_small, "x",
+                 layout->btn_wf_w_inc.x + 22, wf_lbl_y, COLOR_TEXT_DIM);
+    
+    widget_button_draw(&layout->btn_wf_h_dec, layout->ui);
+    ui_draw_text(layout->ui, layout->ui->font_small, wf_h_str,
+                 layout->btn_wf_h_dec.x + 20, wf_lbl_y, COLOR_TEXT);
+    widget_button_draw(&layout->btn_wf_h_inc, layout->ui);
     
     /* Draw gain sliders */
     widget_slider_draw(&layout->slider_gain, layout->ui);

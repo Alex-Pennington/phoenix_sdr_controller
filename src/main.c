@@ -452,6 +452,40 @@ static void app_handle_actions(app_context_t* app, const ui_actions_t* actions)
                  "Waterfall %s", running ? "started" : "stopped");
     }
     
+    /* Waterfall config adjustments */
+    if (actions->wf_w_dec) {
+        if (app->proc_mgr.waterfall_cfg.width > 400) {
+            app->proc_mgr.waterfall_cfg.width -= 50;
+            if (app->proc_mgr.waterfall_cfg.width < 400) 
+                app->proc_mgr.waterfall_cfg.width = 400;
+            snprintf(app->state->status_message, sizeof(app->state->status_message),
+                     "Waterfall width: %d", app->proc_mgr.waterfall_cfg.width);
+        }
+    }
+    if (actions->wf_w_inc) {
+        app->proc_mgr.waterfall_cfg.width += 50;
+        if (app->proc_mgr.waterfall_cfg.width > 2000) 
+            app->proc_mgr.waterfall_cfg.width = 2000;
+        snprintf(app->state->status_message, sizeof(app->state->status_message),
+                 "Waterfall width: %d", app->proc_mgr.waterfall_cfg.width);
+    }
+    if (actions->wf_h_dec) {
+        if (app->proc_mgr.waterfall_cfg.height > 300) {
+            app->proc_mgr.waterfall_cfg.height -= 50;
+            if (app->proc_mgr.waterfall_cfg.height < 300) 
+                app->proc_mgr.waterfall_cfg.height = 300;
+            snprintf(app->state->status_message, sizeof(app->state->status_message),
+                     "Waterfall height: %d", app->proc_mgr.waterfall_cfg.height);
+        }
+    }
+    if (actions->wf_h_inc) {
+        app->proc_mgr.waterfall_cfg.height += 50;
+        if (app->proc_mgr.waterfall_cfg.height > 1200) 
+            app->proc_mgr.waterfall_cfg.height = 1200;
+        snprintf(app->state->status_message, sizeof(app->state->status_message),
+                 "Waterfall height: %d", app->proc_mgr.waterfall_cfg.height);
+    }
+    
     /* Tuning step control (local only, doesn't require connection) */
     if (actions->step_up) {
         app->state->tuning_step = app_next_step(app->state->tuning_step);

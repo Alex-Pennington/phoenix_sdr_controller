@@ -41,11 +41,22 @@ typedef struct {
 } child_process_t;
 
 /**
+ * Waterfall window configuration
+ */
+typedef struct {
+    int width;      /* Window width (min 400, default 1024) */
+    int height;     /* Window height (min 300, default 600) */
+    int pos_x;      /* Window X position (-1 = default) */
+    int pos_y;      /* Window Y position (-1 = default) */
+} waterfall_config_t;
+
+/**
  * Process manager state
  */
 typedef struct {
     HANDLE job;                         /* Job object for child cleanup */
     child_process_t children[PROC_COUNT];
+    waterfall_config_t waterfall_cfg;   /* Waterfall window settings */
     bool initialized;
 } process_manager_t;
 
