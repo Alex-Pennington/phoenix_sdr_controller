@@ -119,11 +119,10 @@ ui_layout_t* ui_layout_create(ui_core_t* ui)
     widget_toggle_init(&layout->toggle_notch, 0, 0, "FM Notch");
     widget_toggle_init(&layout->toggle_aff, 0, 0, "AFF");
     
-    /* AFF interval slider (vertical) */
-    widget_slider_init(&layout->slider_aff_interval, 0, 0, SLIDER_WIDTH, 80,
-                       AFF_INTERVAL_30S, AFF_INTERVAL_120S, true);
-    layout->slider_aff_interval.label = "AFF Int";
-    layout->slider_aff_interval.value = AFF_INTERVAL_60S;
+    /* AFF interval control buttons */
+    widget_button_init(&layout->btn_aff_interval_dec, 0, 0, 20, 22, "-");
+    widget_button_init(&layout->btn_aff_interval_inc, 0, 0, 20, 22, "+");
+    layout->aff_interval_value = AFF_INTERVAL_60S;
     
     /* WWV frequency shortcut buttons */
     widget_button_init(&layout->btn_wwv_2_5, 0, 0, 50, 24, "2.5");
@@ -172,6 +171,7 @@ ui_layout_t* ui_layout_create(ui_core_t* ui)
     
     /* Initialize debug mode */
     layout->debug_mode = false;
+    layout->edit_mode = false;
     
     /* Recalculate to position everything */
     ui_layout_recalculate(layout);
@@ -192,8 +192,8 @@ void ui_layout_destroy(ui_layout_t* layout)
 }
 
 /*
- * Recalculate layout - COMPACT VERSION
- * Layout: Header with LEDs | Freq row | Tuning+WWV+Presets | Gain|Config|Control columns
+ * Recalculate layout - USER ADJUSTED POSITIONS
+ * Manually positioned with F2 edit mode, dumped with F3
  */
 void ui_layout_recalculate(ui_layout_t* layout)
 {
@@ -202,7 +202,7 @@ void ui_layout_recalculate(ui_layout_t* layout)
     int w = layout->ui->window_width;
     int h = layout->ui->window_height;
     
-    /* Header */
+    /* Header (still dynamic for LEDs) */
     layout->regions.header.x = 0;
     layout->regions.header.y = 0;
     layout->regions.header.w = w;
@@ -214,7 +214,7 @@ void ui_layout_recalculate(ui_layout_t* layout)
     layout->regions.footer.w = w;
     layout->regions.footer.h = FOOTER_HEIGHT;
     
-    /* LEDs in header (right side) - spaced for labels */
+    /* LEDs in header (right side) */
     int led_y = HEADER_HEIGHT / 2;
     layout->led_connected.x = w - 200;
     layout->led_connected.y = led_y;
@@ -223,274 +223,152 @@ void ui_layout_recalculate(ui_layout_t* layout)
     layout->led_overload.x = w - 55;
     layout->led_overload.y = led_y;
     
-    /* Content area */
-    int content_y = HEADER_HEIGHT + PANEL_PADDING;
+    /* === USER ADJUSTED POSITIONS (from layout_positions.txt) === */
     
-    /* === ROW 1: Frequency display (full width, taller for 32pt font) === */
-    int freq_h = 55;
-    layout->regions.freq_area.x = PANEL_PADDING;
-    layout->regions.freq_area.y = content_y;
-    layout->regions.freq_area.w = w - PANEL_PADDING * 2;
-    layout->regions.freq_area.h = freq_h;
+    /* Buttons */
+    layout->btn_connect.x = 276; layout->btn_connect.y = 161;
+    layout->btn_connect.w = 124; layout->btn_connect.h = 26;
     
-    layout->panel_freq.x = layout->regions.freq_area.x;
-    layout->panel_freq.y = layout->regions.freq_area.y;
-    layout->panel_freq.w = layout->regions.freq_area.w;
-    layout->panel_freq.h = layout->regions.freq_area.h;
+    layout->btn_start.x = 276; layout->btn_start.y = 195;
+    layout->btn_start.w = 58; layout->btn_start.h = 26;
     
-    /* Frequency display inside panel (vertically centered) */
-    layout->freq_display.x = layout->panel_freq.x + 5;
-    layout->freq_display.y = layout->panel_freq.y + 20;
-    layout->freq_display.w = layout->panel_freq.w - 40;
-    layout->freq_display.h = freq_h - 20;
+    layout->btn_stop.x = 342; layout->btn_stop.y = 195;
+    layout->btn_stop.w = 58; layout->btn_stop.h = 26;
     
-    /* DC offset dot (next to frequency) */
+    layout->btn_freq_down.x = 6; layout->btn_freq_down.y = 97;
+    layout->btn_freq_down.w = 40; layout->btn_freq_down.h = 22;
+    
+    layout->btn_freq_up.x = 50; layout->btn_freq_up.y = 97;
+    layout->btn_freq_up.w = 40; layout->btn_freq_up.h = 22;
+    
+    layout->btn_step_down.x = 102; layout->btn_step_down.y = 97;
+    layout->btn_step_down.w = 30; layout->btn_step_down.h = 22;
+    
+    layout->btn_step_up.x = 136; layout->btn_step_up.y = 97;
+    layout->btn_step_up.w = 30; layout->btn_step_up.h = 22;
+    
+    layout->btn_wwv_2_5.x = 336; layout->btn_wwv_2_5.y = 97;
+    layout->btn_wwv_2_5.w = 32; layout->btn_wwv_2_5.h = 22;
+    
+    layout->btn_wwv_5.x = 371; layout->btn_wwv_5.y = 97;
+    layout->btn_wwv_5.w = 28; layout->btn_wwv_5.h = 22;
+    
+    layout->btn_wwv_10.x = 402; layout->btn_wwv_10.y = 97;
+    layout->btn_wwv_10.w = 28; layout->btn_wwv_10.h = 22;
+    
+    layout->btn_wwv_15.x = 433; layout->btn_wwv_15.y = 97;
+    layout->btn_wwv_15.w = 28; layout->btn_wwv_15.h = 22;
+    
+    layout->btn_wwv_20.x = 464; layout->btn_wwv_20.y = 97;
+    layout->btn_wwv_20.w = 28; layout->btn_wwv_20.h = 22;
+    
+    layout->btn_wwv_25.x = 495; layout->btn_wwv_25.y = 97;
+    layout->btn_wwv_25.w = 28; layout->btn_wwv_25.h = 22;
+    
+    layout->btn_wwv_30.x = 526; layout->btn_wwv_30.y = 97;
+    layout->btn_wwv_30.w = 28; layout->btn_wwv_30.h = 22;
+    
+    layout->btn_server.x = 216; layout->btn_server.y = 123;
+    layout->btn_server.w = 52; layout->btn_server.h = 22;
+    
+    layout->btn_waterfall.x = 272; layout->btn_waterfall.y = 123;
+    layout->btn_waterfall.w = 52; layout->btn_waterfall.h = 22;
+    
+    /* Preset buttons */
+    layout->btn_preset[0].x = 6; layout->btn_preset[0].y = 123;
+    layout->btn_preset[0].w = 36; layout->btn_preset[0].h = 22;
+    
+    layout->btn_preset[1].x = 46; layout->btn_preset[1].y = 123;
+    layout->btn_preset[1].w = 36; layout->btn_preset[1].h = 22;
+    
+    layout->btn_preset[2].x = 86; layout->btn_preset[2].y = 123;
+    layout->btn_preset[2].w = 36; layout->btn_preset[2].h = 22;
+    
+    layout->btn_preset[3].x = 126; layout->btn_preset[3].y = 123;
+    layout->btn_preset[3].w = 36; layout->btn_preset[3].h = 22;
+    
+    layout->btn_preset[4].x = 166; layout->btn_preset[4].y = 123;
+    layout->btn_preset[4].w = 36; layout->btn_preset[4].h = 22;
+    
+    /* Sliders */
+    layout->slider_gain.x = 24; layout->slider_gain.y = 186;
+    layout->slider_gain.w = 32; layout->slider_gain.h = 251;
+    
+    layout->slider_lna.x = 66; layout->slider_lna.y = 186;
+    layout->slider_lna.w = 32; layout->slider_lna.h = 251;
+    
+    /* Combos */
+    layout->combo_agc.x = 120; layout->combo_agc.y = 183;
+    layout->combo_agc.w = 134; layout->combo_agc.h = 22;
+    
+    layout->combo_srate.x = 120; layout->combo_srate.y = 229;
+    layout->combo_srate.w = 134; layout->combo_srate.h = 22;
+    
+    layout->combo_bw.x = 120; layout->combo_bw.y = 275;
+    layout->combo_bw.w = 134; layout->combo_bw.h = 22;
+    
+    layout->combo_antenna.x = 120; layout->combo_antenna.y = 321;
+    layout->combo_antenna.w = 134; layout->combo_antenna.h = 22;
+    
+    /* Toggles */
+    layout->toggle_biast.x = 276; layout->toggle_biast.y = 233;
+    layout->toggle_notch.x = 276; layout->toggle_notch.y = 263;
+    layout->toggle_aff.x = 276; layout->toggle_aff.y = 293;
+    
+    /* Panels */
+    layout->panel_freq.x = 6; layout->panel_freq.y = 36;
+    layout->panel_freq.w = 708; layout->panel_freq.h = 55;
+    
+    layout->panel_gain.x = 6; layout->panel_gain.y = 151;
+    layout->panel_gain.w = 100; layout->panel_gain.h = 301;
+    
+    layout->panel_config.x = 112; layout->panel_config.y = 151;
+    layout->panel_config.w = 150; layout->panel_config.h = 301;
+    
+    layout->panel_wwv.x = 414; layout->panel_wwv.y = 151;
+    layout->panel_wwv.w = 300; layout->panel_wwv.h = 147;
+    
+    layout->panel_bcd.x = 414; layout->panel_bcd.y = 304;
+    layout->panel_bcd.w = 300; layout->panel_bcd.h = 148;
+    
+    /* Frequency display */
+    layout->freq_display.x = 0; layout->freq_display.y = 67;
+    layout->freq_display.w = 668; layout->freq_display.h = 35;
+    
+    /* DC offset dot (calculated from freq display) */
     layout->offset_dot.x = layout->freq_display.x + layout->freq_display.w + 8;
     layout->offset_dot.y = layout->freq_display.y + (layout->freq_display.h / 2) - 5;
     layout->offset_dot.w = 10;
     layout->offset_dot.h = 10;
     
-    /* === ROW 2: Tuning buttons + WWV buttons (same row) === */
-    int row2_y = content_y + freq_h + PANEL_PADDING;
-    int btn_spacing = 4;
+    /* Regions (match panel positions) */
+    layout->regions.freq_area = (SDL_Rect){6, 36, 708, 55};
+    layout->regions.gain_panel = (SDL_Rect){6, 151, 100, 301};
+    layout->regions.wwv_panel = (SDL_Rect){414, 151, 300, 147};
+    layout->regions.bcd_panel = (SDL_Rect){414, 304, 300, 148};
     
-    /* Tuning buttons on left */
-    layout->btn_freq_down.x = PANEL_PADDING;
-    layout->btn_freq_down.y = row2_y;
-    layout->btn_freq_down.w = 40;
-    layout->btn_freq_down.h = 22;
-    
-    layout->btn_freq_up.x = layout->btn_freq_down.x + layout->btn_freq_down.w + btn_spacing;
-    layout->btn_freq_up.y = row2_y;
-    layout->btn_freq_up.w = 40;
-    layout->btn_freq_up.h = 22;
-    
-    layout->btn_step_down.x = layout->btn_freq_up.x + layout->btn_freq_up.w + 12;
-    layout->btn_step_down.y = row2_y;
-    layout->btn_step_down.w = 30;
-    layout->btn_step_down.h = 22;
-    
-    layout->btn_step_up.x = layout->btn_step_down.x + layout->btn_step_down.w + btn_spacing;
-    layout->btn_step_up.y = row2_y;
-    layout->btn_step_up.w = 30;
-    layout->btn_step_up.h = 22;
-    
-    /* WWV buttons (after tuning) */
-    int wwv_x = layout->btn_step_up.x + layout->btn_step_up.w + 20;
-    layout->btn_wwv_2_5.x = wwv_x;
-    layout->btn_wwv_2_5.y = row2_y;
-    layout->btn_wwv_2_5.w = 32;
-    layout->btn_wwv_2_5.h = 22;
-    wwv_x += layout->btn_wwv_2_5.w + 3;
-    
-    layout->btn_wwv_5.x = wwv_x;
-    layout->btn_wwv_5.y = row2_y;
-    layout->btn_wwv_5.w = 28;
-    layout->btn_wwv_5.h = 22;
-    wwv_x += layout->btn_wwv_5.w + 3;
-    
-    layout->btn_wwv_10.x = wwv_x;
-    layout->btn_wwv_10.y = row2_y;
-    layout->btn_wwv_10.w = 28;
-    layout->btn_wwv_10.h = 22;
-    wwv_x += layout->btn_wwv_10.w + 3;
-    
-    layout->btn_wwv_15.x = wwv_x;
-    layout->btn_wwv_15.y = row2_y;
-    layout->btn_wwv_15.w = 28;
-    layout->btn_wwv_15.h = 22;
-    wwv_x += layout->btn_wwv_15.w + 3;
-    
-    layout->btn_wwv_20.x = wwv_x;
-    layout->btn_wwv_20.y = row2_y;
-    layout->btn_wwv_20.w = 28;
-    layout->btn_wwv_20.h = 22;
-    wwv_x += layout->btn_wwv_20.w + 3;
-    
-    layout->btn_wwv_25.x = wwv_x;
-    layout->btn_wwv_25.y = row2_y;
-    layout->btn_wwv_25.w = 28;
-    layout->btn_wwv_25.h = 22;
-    wwv_x += layout->btn_wwv_25.w + 3;
-    
-    layout->btn_wwv_30.x = wwv_x;
-    layout->btn_wwv_30.y = row2_y;
-    layout->btn_wwv_30.w = 28;
-    layout->btn_wwv_30.h = 22;
-    
-    /* === ROW 3: Memory preset buttons === */
-    int row3_y = row2_y + 26;
-    int preset_x = PANEL_PADDING;
-    
-    for (int i = 0; i < NUM_PRESETS; i++) {
-        layout->btn_preset[i].x = preset_x;
-        layout->btn_preset[i].y = row3_y;
-        layout->btn_preset[i].w = 36;
-        layout->btn_preset[i].h = 22;
-        preset_x += layout->btn_preset[i].w + 4;
-    }
-    
-    /* External process buttons (after presets, with gap) */
-    preset_x += 10;  /* Extra gap */
-    layout->btn_server.x = preset_x;
-    layout->btn_server.y = row3_y;
-    layout->btn_server.w = 52;
-    layout->btn_server.h = 22;
-    preset_x += layout->btn_server.w + 4;
-    
-    layout->btn_waterfall.x = preset_x;
-    layout->btn_waterfall.y = row3_y;
-    layout->btn_waterfall.w = 52;
-    layout->btn_waterfall.h = 22;
-    
-    /* === ROW 4: Four columns - Gain | Config | Control | WWV Stats === */
-    int row4_y = row3_y + 28;
-    int col_h = h - row4_y - FOOTER_HEIGHT - PANEL_PADDING;
-    
-    /* Column widths - adjusted for 4 columns */
-    int gain_w = 100;
-    int config_w = 150;
-    int control_w = 140;
-    int wwv_w = w - gain_w - config_w - control_w - PANEL_PADDING * 5;
-    if (wwv_w < 180) wwv_w = 180;
-    
-    /* Gain panel (left column) */
-    layout->regions.gain_panel.x = PANEL_PADDING;
-    layout->regions.gain_panel.y = row4_y;
-    layout->regions.gain_panel.w = gain_w;
-    layout->regions.gain_panel.h = col_h;
-    
-    layout->panel_gain.x = layout->regions.gain_panel.x;
-    layout->panel_gain.y = layout->regions.gain_panel.y;
-    layout->panel_gain.w = layout->regions.gain_panel.w;
-    layout->panel_gain.h = col_h;
-    
-    /* Gain sliders (side by side with more spacing) */
-    layout->slider_gain.x = layout->regions.gain_panel.x + 18;
-    layout->slider_gain.y = row4_y + 35;
-    layout->slider_gain.h = col_h - 50;
-    
-    layout->slider_lna.x = layout->regions.gain_panel.x + 60;
-    layout->slider_lna.y = row4_y + 35;
-    layout->slider_lna.h = col_h - 50;
-    
-    /* Config panel (middle column) */
-    int config_x = PANEL_PADDING + gain_w + PANEL_PADDING;
-    layout->regions.config_panel.x = config_x;
-    layout->regions.config_panel.y = row4_y;
-    layout->regions.config_panel.w = config_w;
-    layout->regions.config_panel.h = col_h;
-    
-    layout->panel_config.x = config_x;
-    layout->panel_config.y = row4_y;
-    layout->panel_config.w = config_w;
-    layout->panel_config.h = col_h;
-    
-    /* Config combos (stacked with more vertical spacing for labels) */
-    int combo_x = config_x + 8;
-    int combo_w = config_w - 16;
-    int combo_spacing = 46;  /* More space for label + combo */
-    
-    layout->combo_agc.x = combo_x;
-    layout->combo_agc.y = row4_y + 32;
-    layout->combo_agc.w = combo_w;
-    
-    layout->combo_srate.x = combo_x;
-    layout->combo_srate.y = row4_y + 32 + combo_spacing;
-    layout->combo_srate.w = combo_w;
-    
-    layout->combo_bw.x = combo_x;
-    layout->combo_bw.y = row4_y + 32 + combo_spacing * 2;
-    layout->combo_bw.w = combo_w;
-    
-    layout->combo_antenna.x = combo_x;
-    layout->combo_antenna.y = row4_y + 32 + combo_spacing * 3;
-    layout->combo_antenna.w = combo_w;
-    
-    /* Control panel (right column) */
-    int status_x = config_x + config_w + PANEL_PADDING;
-    layout->regions.status_panel.x = status_x;
-    layout->regions.status_panel.y = row4_y;
-    layout->regions.status_panel.w = control_w;
-    layout->regions.status_panel.h = col_h;
-    
-    /* Connect button */
-    layout->btn_connect.x = status_x + 8;
-    layout->btn_connect.y = row4_y + 10;
-    layout->btn_connect.w = control_w - 16;
-    layout->btn_connect.h = 26;
-    
-    /* Start/Stop buttons (side by side) */
-    int half_btn = (control_w - 24) / 2;
-    layout->btn_start.x = status_x + 8;
-    layout->btn_start.y = row4_y + 44;
-    layout->btn_start.w = half_btn;
-    layout->btn_start.h = 26;
-    
-    layout->btn_stop.x = status_x + 8 + half_btn + 8;
-    layout->btn_stop.y = row4_y + 44;
-    layout->btn_stop.w = half_btn;
-    layout->btn_stop.h = 26;
-    
-    /* Toggles (below buttons with more spacing) */
-    layout->toggle_biast.x = status_x + 8;
-    layout->toggle_biast.y = row4_y + 82;
-    
-    layout->toggle_notch.x = status_x + 8;
-    layout->toggle_notch.y = row4_y + 112;
-    
-    layout->toggle_aff.x = status_x + 8;
-    layout->toggle_aff.y = row4_y + 142;
-    
-    /* AFF interval slider (right side of config panel) */
-    layout->slider_aff_interval.x = config_x + config_w - 45;
-    layout->slider_aff_interval.y = row4_y + 35;
-    layout->slider_aff_interval.h = col_h - 50;
-    
-    /* WWV Stats panel (rightmost column - top half) */
-    int wwv_panel_x = status_x + control_w + PANEL_PADDING;
-    int wwv_h = (col_h - PANEL_PADDING) / 2;  /* Split column in half */
-    layout->regions.wwv_panel.x = wwv_panel_x;
-    layout->regions.wwv_panel.y = row4_y;
-    layout->regions.wwv_panel.w = wwv_w;
-    layout->regions.wwv_panel.h = wwv_h;
-    
-    layout->panel_wwv.x = wwv_panel_x;
-    layout->panel_wwv.y = row4_y;
-    layout->panel_wwv.w = wwv_w;
-    layout->panel_wwv.h = wwv_h;
-    
-    /* WWV indicator LEDs (positioned inside panel) */
-    int wwv_led_y = row4_y + wwv_h - 30;
-    layout->led_tone500.x = wwv_panel_x + 20;
-    layout->led_tone500.y = wwv_led_y;
-    layout->led_tone600.x = wwv_panel_x + 70;
-    layout->led_tone600.y = wwv_led_y;
-    layout->led_match.x = wwv_panel_x + 120;
-    layout->led_match.y = wwv_led_y;
-    
-    /* BCD Time panel (rightmost column - bottom half) */
-    int bcd_panel_y = row4_y + wwv_h + PANEL_PADDING;
-    int bcd_h = col_h - wwv_h - PANEL_PADDING;
-    layout->regions.bcd_panel.x = wwv_panel_x;
-    layout->regions.bcd_panel.y = bcd_panel_y;
-    layout->regions.bcd_panel.w = wwv_w;
-    layout->regions.bcd_panel.h = bcd_h;
-    
-    layout->panel_bcd.x = wwv_panel_x;
-    layout->panel_bcd.y = bcd_panel_y;
-    layout->panel_bcd.w = wwv_w;
-    layout->panel_bcd.h = bcd_h;
+    /* WWV indicator LEDs (inside panel) */
+    layout->led_tone500.x = 434;
+    layout->led_tone500.y = layout->panel_wwv.y + layout->panel_wwv.h - 30;
+    layout->led_tone600.x = 484;
+    layout->led_tone600.y = layout->panel_wwv.y + layout->panel_wwv.h - 30;
+    layout->led_match.x = 534;
+    layout->led_match.y = layout->panel_wwv.y + layout->panel_wwv.h - 30;
     
     /* BCD sync LED (inside panel) */
-    layout->led_bcd_sync.x = wwv_panel_x + 20;
-    layout->led_bcd_sync.y = bcd_panel_y + bcd_h - 30;
+    layout->led_bcd_sync.x = 434;
+    layout->led_bcd_sync.y = layout->panel_bcd.y + layout->panel_bcd.h - 30;
     
-    /* Tuning panel region (not visible, just for event tracking) */
-    layout->regions.tuning_panel.x = PANEL_PADDING;
-    layout->regions.tuning_panel.y = row2_y;
-    layout->regions.tuning_panel.w = w - PANEL_PADDING * 2;
-    layout->regions.tuning_panel.h = 50;
+    /* AFF interval control buttons (in config panel, below antenna combo) */
+    layout->btn_aff_interval_dec.x = layout->combo_antenna.x;
+    layout->btn_aff_interval_dec.y = layout->combo_antenna.y + layout->combo_antenna.h + 30;
+    layout->btn_aff_interval_dec.w = 20;
+    layout->btn_aff_interval_dec.h = 22;
+    
+    layout->btn_aff_interval_inc.x = layout->btn_aff_interval_dec.x + 114;
+    layout->btn_aff_interval_inc.y = layout->btn_aff_interval_dec.y;
+    layout->btn_aff_interval_inc.w = 20;
+    layout->btn_aff_interval_inc.h = 22;
 }
 
 /*
@@ -580,6 +458,11 @@ void ui_layout_update(ui_layout_t* layout, const mouse_state_t* mouse,
     if (layout->debug_mode && mouse->left_clicked) {
         ui_layout_debug_click(layout, mouse->x, mouse->y);
         return;  /* Don't process normal UI interactions in debug mode */
+    }
+    
+    /* Skip normal UI processing in edit mode */
+    if (layout->edit_mode) {
+        return;  /* Let edit mode handle mouse events */
     }
     
     /* Update LEDs for hover state */
@@ -684,9 +567,12 @@ void ui_layout_update(ui_layout_t* layout, const mouse_state_t* mouse,
         actions->new_aff = layout->toggle_aff.value;
     }
     
-    if (widget_slider_update(&layout->slider_aff_interval, mouse)) {
-        actions->aff_interval_changed = true;
-        actions->new_aff_interval = layout->slider_aff_interval.value;
+    if (widget_button_update(&layout->btn_aff_interval_dec, mouse)) {
+        actions->aff_interval_dec = true;
+    }
+    
+    if (widget_button_update(&layout->btn_aff_interval_inc, mouse)) {
+        actions->aff_interval_inc = true;
     }
     
     /* Check for DC offset dot click */
@@ -840,11 +726,41 @@ void ui_layout_draw(ui_layout_t* layout, const app_state_t* state)
     widget_toggle_draw(&layout->toggle_notch, layout->ui);
     widget_toggle_draw(&layout->toggle_aff, layout->ui);
     
-    /* Draw AFF interval slider */
-    widget_slider_draw(&layout->slider_aff_interval, layout->ui);
+    /* Draw AFF interval control (label + buttons in config panel) */
+    static const char* interval_labels[] = {"30s", "45s", "60s", "90s", "120s"};
+    int interval_idx = layout->aff_interval_value;
+    if (interval_idx < 0 || interval_idx >= AFF_INTERVAL_COUNT) interval_idx = AFF_INTERVAL_60S;
+    
+    char aff_label[32];
+    snprintf(aff_label, sizeof(aff_label), "AFF Int: %s", interval_labels[interval_idx]);
+    ui_draw_text(layout->ui, layout->ui->font_small, aff_label,
+                 layout->btn_aff_interval_dec.x,
+                 layout->btn_aff_interval_dec.y - 16,
+                 COLOR_TEXT);
+    
+    widget_button_draw(&layout->btn_aff_interval_dec, layout->ui);
+    widget_button_draw(&layout->btn_aff_interval_inc, layout->ui);
     
     /* Draw footer */
     ui_layout_draw_footer(layout, state);
+    
+    /* Draw edit mode banner (if active) */
+    if (layout->edit_mode) {
+        int banner_h = 40;
+        int banner_y = (layout->ui->window_height - banner_h) / 2;
+        
+        /* Semi-transparent background */
+        ui_draw_rect(layout->ui, 0, banner_y, layout->ui->window_width, banner_h, 0x000000DD);
+        
+        /* Border */
+        ui_draw_rect_outline(layout->ui, 0, banner_y, layout->ui->window_width, banner_h, COLOR_ACCENT);
+        ui_draw_rect_outline(layout->ui, 1, banner_y + 1, layout->ui->window_width - 2, banner_h - 2, COLOR_ACCENT);
+        
+        /* Text */
+        const char* msg = "EDIT MODE: Click and drag widgets to reposition | F3 = Save positions | F2 = Exit";
+        ui_draw_text_centered(layout->ui, layout->ui->font_large, msg, 
+                             0, banner_y + 10, layout->ui->window_width, COLOR_ACCENT);
+    }
 }
 
 /*

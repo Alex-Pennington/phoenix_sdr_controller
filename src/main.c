@@ -85,8 +85,8 @@ int main(int argc, char* argv[])
             break;
         }
         
-        /* Handle window resize */
-        if (app.layout) {
+        /* Handle window resize (skip in edit mode to preserve manual positions) */
+        if (app.layout && !app.layout->edit_mode) {
             ui_layout_recalculate(app.layout);
         }
         
@@ -98,6 +98,19 @@ int main(int argc, char* argv[])
         
         /* Update UI and get actions */
         ui_layout_update(app.layout, &mouse, NULL, &actions);
+        
+        /* Handle edit mode mouse dragging */
+        if (app.layout->edit_mode) {
+            if (mouse.left_clicked) {
+                ui_layout_edit_mouse_down(app.layout, mouse.x, mouse.y);
+            }
+            if (mouse.left_down) {
+                ui_layout_edit_mouse_move(app.layout, mouse.x, mouse.y);
+            }
+            if (mouse.left_released) {
+                ui_layout_edit_mouse_up(app.layout);
+            }
+        }
         
         /* Handle UI actions */
         app_handle_actions(&app, &actions);
@@ -116,6 +129,18 @@ int main(int argc, char* argv[])
         /* F1: Toggle debug mode */
         if (app.ui->last_key == SDLK_F1) {
             ui_layout_toggle_debug(app.layout);
+        }
+        
+        /* F2: Toggle edit mode (drag-and-drop) */
+        if (app.ui->last_key == SDLK_F2) {
+            ui_layout_toggle_edit_mode(app.layout);
+        }
+        
+        /* F3: Dump positions (if in edit mode) */
+        if (app.ui->last_key == SDLK_F3) {
+            if (app.layout->edit_mode) {
+                ui_layout_dump_positions(app.layout, "layout_positions.txt");
+            }
         }
         
         /* Debug: Toggle overload with 'O' key for testing */
@@ -194,7 +219,7 @@ int main(int argc, char* argv[])
             /* Sync AFF toggle state to UI */
             if (app.aff) {
                 app.layout->toggle_aff.value = aff_is_enabled(app.aff);
-                app.layout->slider_aff_interval.value = aff_get_interval(app.aff);
+                app.layout->aff_interval_value = aff_get_interval(app.aff);
             }
         }
         
@@ -671,10 +696,22 @@ static void app_handle_actions(app_context_t* app, const ui_actions_t* actions)
         }
     }
     
-    if (actions->aff_interval_changed) {
-        aff_set_interval(app->aff, actions->new_aff_interval);
-        snprintf(app->state->status_message, sizeof(app->state->status_message),
-                 "AFF interval: %s", aff_interval_string(actions->new_aff_interval));
+    if (actions->aff_interval_dec) {
+        int current = aff_get_interval(app->aff);
+        if (current > AFF_INTERVAL_30S) {
+            aff_set_interval(app->aff, current - 1);
+            snprintf(app->state->status_message, sizeof(app->state->status_message),
+                     "AFF interval: %s", aff_interval_string(current - 1));
+        }
+    }
+    
+    if (actions->aff_interval_inc) {
+        int current = aff_get_interval(app->aff);
+        if (current < AFF_INTERVAL_120S) {
+            aff_set_interval(app->aff, current + 1);
+            snprintf(app->state->status_message, sizeof(app->state->status_message),
+                     "AFF interval: %s", aff_interval_string(current + 1));
+        }
     }
 }
 

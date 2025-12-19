@@ -187,9 +187,14 @@ void ui_layout_draw_debug(ui_layout_t* layout)
         layout->slider_lna.x, layout->slider_lna.y,
         layout->slider_lna.w, layout->slider_lna.h, DEBUG_COLOR_SLIDER);
     
-    draw_debug_rect(ui, "slider_aff", 
-        layout->slider_aff_interval.x, layout->slider_aff_interval.y,
-        layout->slider_aff_interval.w, layout->slider_aff_interval.h, DEBUG_COLOR_SLIDER);
+    /* AFF interval buttons */
+    draw_debug_rect(ui, "btn_aff-", 
+        layout->btn_aff_interval_dec.x, layout->btn_aff_interval_dec.y,
+        layout->btn_aff_interval_dec.w, layout->btn_aff_interval_dec.h, DEBUG_COLOR_BUTTON);
+    
+    draw_debug_rect(ui, "btn_aff+", 
+        layout->btn_aff_interval_inc.x, layout->btn_aff_interval_inc.y,
+        layout->btn_aff_interval_inc.w, layout->btn_aff_interval_inc.h, DEBUG_COLOR_BUTTON);
     
     /* Combos */
     draw_debug_rect(ui, "combo_agc", 

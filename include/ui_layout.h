@@ -76,8 +76,10 @@ typedef struct {
     widget_toggle_t toggle_notch;
     widget_toggle_t toggle_aff;     /* AFF enable toggle */
     
-    /* AFF interval slider */
-    widget_slider_t slider_aff_interval;
+    /* AFF interval control (-/+ buttons) */
+    widget_button_t btn_aff_interval_dec;
+    widget_button_t btn_aff_interval_inc;
+    int aff_interval_value;  /* Current interval index (for display) */
     
     /* DC offset indicator (clickable dot next to freq display) */
     SDL_Rect offset_dot;
@@ -121,6 +123,9 @@ typedef struct {
     /* Debug mode (F1 to toggle) */
     bool debug_mode;
     
+    /* Edit mode (F2 to toggle, F3 to dump) */
+    bool edit_mode;
+    
 } ui_layout_t;
 
 /* Action results from UI update */
@@ -161,8 +166,8 @@ typedef struct {
     bool waterfall_toggled; /* Start/Stop Waterfall clicked */
     bool aff_toggled;       /* AFF enable toggle clicked */
     bool new_aff;           /* New AFF state */
-    bool aff_interval_changed;  /* AFF interval slider changed */
-    int new_aff_interval;       /* New AFF interval index */
+    bool aff_interval_dec;  /* AFF interval - button clicked */
+    bool aff_interval_inc;  /* AFF interval + button clicked */
 } ui_actions_t;
 
 /* Create layout */
@@ -208,5 +213,12 @@ void ui_layout_draw_bcd_panel_from_telem(ui_layout_t* layout, const udp_telemetr
 void ui_layout_toggle_debug(ui_layout_t* layout);
 void ui_layout_draw_debug(ui_layout_t* layout);
 void ui_layout_debug_click(ui_layout_t* layout, int x, int y);
+
+/* Edit mode (F2 to toggle, F3 to dump positions) */
+void ui_layout_toggle_edit_mode(ui_layout_t* layout);
+void ui_layout_edit_mouse_down(ui_layout_t* layout, int x, int y);
+void ui_layout_edit_mouse_move(ui_layout_t* layout, int x, int y);
+void ui_layout_edit_mouse_up(ui_layout_t* layout);
+void ui_layout_dump_positions(const ui_layout_t* layout, const char* filename);
 
 #endif /* UI_LAYOUT_H */
