@@ -135,25 +135,25 @@ int main(int argc, char* argv[])
                     /* Debug: log first symbol */
                     static bool first_sym = true;
                     if (first_sym) {
-                        LOG_INFO("First BCD symbol: %c width=%.1fms ts=%.1f",
+                        LOG_INFO("First BCD symbol: %c pos=%d width=%.1fms conf=%.2f",
                                  app.telemetry->bcds.last_symbol,
+                                 app.telemetry->bcds.last_symbol_second,
                                  app.telemetry->bcds.last_symbol_width_ms,
-                                 app.telemetry->bcds.last_symbol_timestamp_ms);
+                                 app.telemetry->bcds.last_symbol_confidence);
                         first_sym = false;
                     }
                     
-                    /* Feed symbol to frame assembler with sync timing */
-                    bool sync_locked = (app.telemetry->sync.state == SYNC_LOCKED);
-                    float minute_anchor = app.telemetry->sync.last_confirmed_ms;
-                    
+                    /* Feed symbol to frame assembler (Unified Sync v1.0) */
+                    /* Frame position now resolved by modem - no timing calculations needed */
                     bcd_decoder_process_symbol(app.bcd_decoder,
                         app.telemetry->bcds.last_symbol,
-                        app.telemetry->bcds.last_symbol_timestamp_ms,
+                        app.telemetry->bcds.last_symbol_second,
                         app.telemetry->bcds.last_symbol_width_ms,
-                        sync_locked,
-                        minute_anchor);
+                        app.telemetry->bcds.last_symbol_confidence,
+                        app.telemetry->sync.state);
                 }
             }
+
             
             /* Feed SYNC data to AFF when available */
             if (app.aff && app.telemetry->sync.valid) {

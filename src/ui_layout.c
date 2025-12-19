@@ -573,6 +573,15 @@ void ui_layout_update(ui_layout_t* layout, const mouse_state_t* mouse,
     /* Clear actions */
     memset(actions, 0, sizeof(ui_actions_t));
     
+    /* Update LEDs for hover state */
+    widget_led_update(&layout->led_connected, mouse);
+    widget_led_update(&layout->led_streaming, mouse);
+    widget_led_update(&layout->led_overload, mouse);
+    widget_led_update(&layout->led_tone500, mouse);
+    widget_led_update(&layout->led_tone600, mouse);
+    widget_led_update(&layout->led_match, mouse);
+    widget_led_update(&layout->led_bcd_sync, mouse);
+    
     /* Handle window resize */
     if (layout->ui->window_width != layout->regions.header.w ||
         layout->ui->window_height != layout->regions.footer.y + FOOTER_HEIGHT) {
@@ -764,12 +773,14 @@ void ui_layout_draw(ui_layout_t* layout, const app_state_t* state)
     ui_draw_rect(layout->ui, layout->regions.tuning_panel.x, layout->regions.tuning_panel.y,
                  layout->regions.tuning_panel.w, layout->regions.tuning_panel.h, COLOR_BG_PANEL);
     
-    /* Draw step label */
+    /* Draw step label - moved further right to avoid WWV button overlap */
     if (state) {
         char step_str[32];
         snprintf(step_str, sizeof(step_str), "Step: %s", app_get_step_string(state->tuning_step));
+        /* Position it between step buttons and WWV buttons with padding */
+        int label_x = layout->btn_step_up.x + layout->btn_step_up.w + 6;
         ui_draw_text(layout->ui, layout->ui->font_normal, step_str,
-                    layout->btn_step_up.x + 60, layout->btn_step_up.y + 8, COLOR_TEXT);
+                    label_x, layout->btn_step_up.y + 3, COLOR_ACCENT);
     }
     
     /* Draw tuning buttons */
@@ -1042,6 +1053,7 @@ void ui_layout_draw_wwv_panel(ui_layout_t* layout, const udp_telemetry_t* telem)
         switch (telem->sync.state) {
             case SYNC_LOCKED: sync_color = COLOR_GREEN; break;
             case SYNC_TENTATIVE: sync_color = COLOR_ORANGE; break;
+            case SYNC_RECOVERING: sync_color = COLOR_YELLOW; break;
             case SYNC_ACQUIRING:
             default: sync_color = COLOR_TEXT_DIM; break;
         }

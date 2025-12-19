@@ -63,6 +63,7 @@ static sync_state_t parse_sync_state(const char* str)
     if (!str) return SYNC_ACQUIRING;
     if (strcmp(str, "LOCKED") == 0) return SYNC_LOCKED;
     if (strcmp(str, "TENTATIVE") == 0) return SYNC_TENTATIVE;
+    if (strcmp(str, "RECOVERING") == 0) return SYNC_RECOVERING;
     return SYNC_ACQUIRING;
 }
 
@@ -491,24 +492,27 @@ telemetry_type_t udp_telemetry_parse(udp_telemetry_t* telem, const char* packet)
             telem->bcds.last_update = now;
         }
         else if (strcmp(token, "SYM") == 0) {
-            /* SYM,symbol,timestamp_ms,width_ms */
+            /* SYM,symbol,second,duration_ms,confidence */
             /* symbol (0, 1, P) */
             token = strtok(NULL, ",");
             if (!token) return TELEM_NONE;
             telem->bcds.last_symbol = token[0];
             
-            /* timestamp_ms (modem timestamp) */
+            /* second (frame position 0-59) */
             token = strtok(NULL, ",");
             if (!token) return TELEM_NONE;
-            telem->bcds.last_symbol_timestamp_ms = (float)atof(token);
+            telem->bcds.last_symbol_second = atoi(token);
+            telem->bcds.last_symbol_pos = telem->bcds.last_symbol_second;  /* Same value */
             
-            /* width_ms */
+            /* duration_ms (width) */
             token = strtok(NULL, ",");
             if (!token) return TELEM_NONE;
             telem->bcds.last_symbol_width_ms = (float)atof(token);
             
-            /* Calculate frame position from sync timing if locked */
-            telem->bcds.last_symbol_pos = -1;  /* Will be calculated by frame assembler */
+            /* confidence (0.0-1.0) */
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            telem->bcds.last_symbol_confidence = (float)atof(token);
             
             telem->bcds.valid = true;
             telem->bcds.last_update = now;
@@ -645,6 +649,24 @@ telemetry_type_t udp_telemetry_parse(udp_telemetry_t* telem, const char* packet)
         
         return TELEM_SYNC;
     }
+    else if (strcmp(token, "STATE") == 0) {
+        /* STATE,old_state,new_state,confidence */
+        char *old_state = strtok(NULL, ",");
+        char *new_state = strtok(NULL, ",");
+        char *conf_str = strtok(NULL, ",");
+        
+        if (old_state && new_state && conf_str) {
+            float conf = (float)atof(conf_str);
+            LOG_INFO("[SYNC] State transition: %s → %s (confidence=%.2f)", 
+                    old_state, new_state, conf);
+            
+            /* Update current state */
+            telem->sync.state = parse_sync_state(new_state);
+            telem->sync.valid = true;
+            telem->sync.last_update = now;
+        }
+        return TELEM_SYNC;
+    }
     
     return TELEM_NONE;
 }
@@ -710,6 +732,7 @@ const char* udp_telemetry_sync_state_str(sync_state_t state)
     switch (state) {
         case SYNC_LOCKED: return "LOCKED";
         case SYNC_TENTATIVE: return "TENTATIVE";
+        case SYNC_RECOVERING: return "RECOVERING";
         case SYNC_ACQUIRING:
         default: return "ACQUIRING";
     }

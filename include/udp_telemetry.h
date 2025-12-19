@@ -126,8 +126,9 @@ typedef struct {
     uint32_t symbol_count;
     char last_symbol;           /* '0', '1', 'P', or '?' */
     int last_symbol_pos;        /* Calculated from sync timing, or -1 */
-    float last_symbol_timestamp_ms;  /* Modem timestamp when symbol detected */
+    int last_symbol_second;     /* Frame second (0-59) from modem */
     float last_symbol_width_ms;
+    float last_symbol_confidence;  /* Symbol confidence 0.0-1.0 */
     /* Decoded time (if valid) */
     bool time_valid;
     int hours;
@@ -140,12 +141,8 @@ typedef struct {
     uint32_t last_update;
 } telem_bcds_t;
 
-/* Sync state */
-typedef enum {
-    SYNC_ACQUIRING = 0, /* Initial state - searching for first marker */
-    SYNC_TENTATIVE,     /* Found 1st marker, need confirmation */
-    SYNC_LOCKED         /* 2+ markers with valid ~60s intervals */
-} sync_state_t;
+/* Sync state - NOTE: Now defined in common.h to match modem contract */
+/* This typedef is kept for backward compatibility but uses common.h definition */
 
 /* MARK - Minute marker event data */
 typedef struct {
@@ -165,8 +162,8 @@ typedef struct {
 typedef struct {
     int marker_num;         /* Confirmed marker count (0, 1, 2, ...) */
     sync_state_t state;     /* ACQUIRING, TENTATIVE, LOCKED */
-    int good_intervals;     /* Count of valid ~60s intervals */
-    float interval_sec;     /* Seconds between last two markers */
+    int good_intervals;     /* Count of valid ~60s intervals (confidence indicator) */
+    float interval_sec;     /* Interval between markers (seconds) */
     float delta_ms;         /* Timing error from expected (ms) */
     float tick_dur_ms;      /* Last tick pulse duration (ms) */
     float marker_dur_ms;    /* Last marker pulse duration (ms) */

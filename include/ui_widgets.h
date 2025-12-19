@@ -61,6 +61,7 @@ typedef struct {
     uint32_t color_off;
     bool on;
     const char* label;
+    bool hovered;  /* For hover-only label display */
 } widget_led_t;
 
 /* Frequency display */
@@ -111,6 +112,7 @@ void widget_toggle_draw(widget_toggle_t* toggle, ui_core_t* ui);
 /* LED functions */
 void widget_led_init(widget_led_t* led, int x, int y, int radius, 
                      uint32_t color_on, uint32_t color_off, const char* label);
+void widget_led_update(widget_led_t* led, const mouse_state_t* mouse);
 void widget_led_draw(widget_led_t* led, ui_core_t* ui);
 
 /* Frequency display functions */

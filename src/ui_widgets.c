@@ -400,6 +400,21 @@ void widget_led_init(widget_led_t* led, int x, int y, int radius,
     led->color_off = color_off;
     led->on = false;
     led->label = label;
+    led->hovered = false;
+}
+
+void widget_led_update(widget_led_t* led, const mouse_state_t* mouse)
+{
+    if (!led || !mouse) {
+        if (led) led->hovered = false;
+        return;
+    }
+    
+    /* Check if mouse is over LED (use slightly larger hit area) */
+    int hit_radius = led->radius + 15;  /* Generous hit area */
+    int dx = mouse->x - led->x;
+    int dy = mouse->y - led->y;
+    led->hovered = (dx * dx + dy * dy) <= (hit_radius * hit_radius);
 }
 
 void widget_led_draw(widget_led_t* led, ui_core_t* ui)
@@ -419,8 +434,8 @@ void widget_led_draw(widget_led_t* led, ui_core_t* ui)
                              size + 2, size + 2, glow_color);
     }
     
-    /* Draw label */
-    if (led->label) {
+    /* Draw label ONLY when hovered */
+    if (led->label && led->hovered) {
         ui_draw_text(ui, ui->font_small, led->label,
                     led->x + led->radius + 6, led->y - 6, COLOR_TEXT);
     }
@@ -492,9 +507,7 @@ void widget_freq_display_draw(widget_freq_display_t* disp, ui_core_t* ui)
 {
     if (!disp || !ui) return;
     
-    /* Draw background */
-    ui_draw_rect(ui, disp->x, disp->y, disp->w, disp->h, COLOR_BG_PANEL);
-    ui_draw_rect_outline(ui, disp->x, disp->y, disp->w, disp->h, COLOR_ACCENT_DIM);
+    /* Don't draw background - parent panel already draws it */
     
     /* Format frequency with grouping */
     char freq_str[20];

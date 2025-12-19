@@ -15,6 +15,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "common.h"  /* For sync_state_t */
 
 #ifdef __cplusplus
 extern "C" {
@@ -123,17 +124,17 @@ void bcd_decoder_destroy(bcd_decoder_t *dec);
  *
  * @param dec               Decoder instance
  * @param symbol            Symbol type ('0', '1', 'P')
- * @param timestamp_ms      Modem timestamp when symbol was detected
+ * @param frame_second      Frame position (0-59) from modem
  * @param width_ms          Pulse width in milliseconds
- * @param sync_locked       true if minute sync is LOCKED
- * @param minute_anchor_ms  Timestamp of last confirmed minute boundary
+ * @param confidence        Symbol confidence 0.0-1.0
+ * @param sync_state        Current sync state from modem
  */
 void bcd_decoder_process_symbol(bcd_decoder_t *dec,
                                 char symbol,
-                                float timestamp_ms,
+                                int frame_second,
                                 float width_ms,
-                                bool sync_locked,
-                                float minute_anchor_ms);
+                                float confidence,
+                                sync_state_t sync_state);
 
 /**
  * Reset decoder state

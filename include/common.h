@@ -76,6 +76,14 @@
 #define PRESET_NAME_MAX 32
 #define PRESETS_FILENAME "phoenix_sdr_presets.ini"
 
+/* Sync state */
+typedef enum {
+    SYNC_ACQUIRING = 0,  /* No confirmed markers yet */
+    SYNC_TENTATIVE = 1,  /* 1 confirmed marker, waiting for confirmation */
+    SYNC_LOCKED = 2,     /* 2+ markers with valid ~60s intervals */
+    SYNC_RECOVERING = 3  /* Temporary loss, attempting recovery */
+} sync_state_t;
+
 /* Preset structure */
 typedef struct {
     bool valid;                         /* True if preset has been saved */
