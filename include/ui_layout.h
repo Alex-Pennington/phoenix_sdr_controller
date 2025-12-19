@@ -118,6 +118,9 @@ typedef struct {
     widget_panel_t panel_bcd;
     widget_led_t led_bcd_sync;
     
+    /* Debug mode (F1 to toggle) */
+    bool debug_mode;
+    
 } ui_layout_t;
 
 /* Action results from UI update */
@@ -200,5 +203,10 @@ void ui_layout_draw_bcd_panel(ui_layout_t* layout, const bcd_decoder_t* bcd);
 
 /* Draw BCD panel from modem telemetry (BCDS packets) */
 void ui_layout_draw_bcd_panel_from_telem(ui_layout_t* layout, const udp_telemetry_t* telem);
+
+/* Debug mode (F1 to toggle) */
+void ui_layout_toggle_debug(ui_layout_t* layout);
+void ui_layout_draw_debug(ui_layout_t* layout);
+void ui_layout_debug_click(ui_layout_t* layout, int x, int y);
 
 #endif /* UI_LAYOUT_H */

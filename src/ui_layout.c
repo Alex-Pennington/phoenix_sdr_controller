@@ -170,6 +170,9 @@ ui_layout_t* ui_layout_create(ui_core_t* ui)
     widget_panel_init(&layout->panel_bcd, 0, 0, 0, 0, "BCD Time");
     widget_led_init(&layout->led_bcd_sync, 0, 0, LED_RADIUS, COLOR_GREEN, COLOR_TEXT_DIM, "Sync");
     
+    /* Initialize debug mode */
+    layout->debug_mode = false;
+    
     /* Recalculate to position everything */
     ui_layout_recalculate(layout);
     
@@ -236,8 +239,8 @@ void ui_layout_recalculate(ui_layout_t* layout)
     layout->panel_freq.h = layout->regions.freq_area.h;
     
     /* Frequency display inside panel (vertically centered) */
-    layout->freq_display.x = layout->panel_freq.x + 15;
-    layout->freq_display.y = layout->panel_freq.y + 10;
+    layout->freq_display.x = layout->panel_freq.x + 5;
+    layout->freq_display.y = layout->panel_freq.y + 20;
     layout->freq_display.w = layout->panel_freq.w - 40;
     layout->freq_display.h = freq_h - 20;
     
@@ -572,6 +575,12 @@ void ui_layout_update(ui_layout_t* layout, const mouse_state_t* mouse,
     
     /* Clear actions */
     memset(actions, 0, sizeof(ui_actions_t));
+    
+    /* Handle debug mode clicks */
+    if (layout->debug_mode && mouse->left_clicked) {
+        ui_layout_debug_click(layout, mouse->x, mouse->y);
+        return;  /* Don't process normal UI interactions in debug mode */
+    }
     
     /* Update LEDs for hover state */
     widget_led_update(&layout->led_connected, mouse);

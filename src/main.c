@@ -113,6 +113,11 @@ int main(int argc, char* argv[])
             }
         }
         
+        /* F1: Toggle debug mode */
+        if (app.ui->last_key == SDLK_F1) {
+            ui_layout_toggle_debug(app.layout);
+        }
+        
         /* Debug: Toggle overload with 'O' key for testing */
         if (app.ui->last_key == SDLK_o) {
             app.state->overload = !app.state->overload;
@@ -206,6 +211,9 @@ int main(int argc, char* argv[])
             ui_layout_sync_bcd(app.layout, app.bcd_decoder);
             ui_layout_draw_bcd_panel(app.layout, app.bcd_decoder);
         }
+        
+        /* Draw debug overlay (F1 to toggle) */
+        ui_layout_draw_debug(app.layout);
         
         /* End frame - present */
         ui_core_end_frame(app.ui);

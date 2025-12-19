@@ -46,6 +46,7 @@ set(SOURCES
     src/ui_core.c
     src/ui_widgets.c
     src/ui_layout.c
+    src/ui_layout_debug.c
     src/app_state.c
     src/process_manager.c
     src/udp_telemetry.c
