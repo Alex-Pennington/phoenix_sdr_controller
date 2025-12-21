@@ -1,7 +1,0 @@
-# Phoenix SDR WWV Marker Log v1.2.0+40.0a7f527-dirty
-# Started: 2025-12-17 16:56:52
-# Sliding window: 195 frames (1000 ms)
-time,timestamp_ms,marker_num,wwv_sec,expected,accum_energy,duration_ms,since_last_sec,baseline,threshold
-16:57:03,11473.9,M1,4,TICK,0.149449,911.4,0.0,0.035718,0.107153
-16:57:25,32025.6,META,0,freq=10000000 rate=2000000 GR=48 LNA=3,0,0,0,0,0
-16:59:03,131169.3,M2,4,TICK,0.795024,998.4,119.6,0.153732,0.461196

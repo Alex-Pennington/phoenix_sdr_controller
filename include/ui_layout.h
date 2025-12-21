@@ -128,6 +128,21 @@ typedef struct {
     widget_panel_t panel_bcd;
     widget_led_t led_bcd_sync;
     
+    /* Tick correlation panel */
+    widget_panel_t panel_corr;
+    
+    /* Sync status panel */
+    widget_panel_t panel_sync;
+    widget_led_t led_sync_locked;
+    
+    /* Minute marker panel */
+    widget_panel_t panel_mark;
+    
+    /* Telemetry panel (bottom left with tabs) */
+    widget_panel_t panel_telemetry;
+    widget_button_t tab_telemetry[4];  /* Tab buttons across top */
+    int active_telemetry_tab;          /* 0-3 for active tab */
+    
     /* Debug mode (F1 to toggle) */
     bool debug_mode;
     
@@ -220,6 +235,18 @@ void ui_layout_draw_bcd_panel(ui_layout_t* layout, const bcd_decoder_t* bcd);
 
 /* Draw BCD panel from modem telemetry (BCDS packets) */
 void ui_layout_draw_bcd_panel_from_telem(ui_layout_t* layout, const udp_telemetry_t* telem);
+
+/* Draw Tick Correlation panel (CORR packets) */
+void ui_layout_draw_corr_panel(ui_layout_t* layout, const udp_telemetry_t* telem);
+
+/* Draw Sync Status panel (SYNC/STATE packets) */
+void ui_layout_draw_sync_panel(ui_layout_t* layout, const udp_telemetry_t* telem);
+
+/* Draw Minute Marker panel (MARK packets) */
+void ui_layout_draw_mark_panel(ui_layout_t* layout, const udp_telemetry_t* telem);
+
+/* Draw Telemetry panel (bottom left with tabs) */
+void ui_layout_draw_telemetry_panel(ui_layout_t* layout);
 
 /* Debug mode (F1 to toggle) */
 void ui_layout_toggle_debug(ui_layout_t* layout);

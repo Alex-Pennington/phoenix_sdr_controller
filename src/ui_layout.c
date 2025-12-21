@@ -175,6 +175,16 @@ ui_layout_t* ui_layout_create(ui_core_t* ui)
     widget_panel_init(&layout->panel_bcd, 0, 0, 0, 0, "BCD Time");
     widget_led_init(&layout->led_bcd_sync, 0, 0, LED_RADIUS, COLOR_GREEN, COLOR_TEXT_DIM, "Sync");
     
+    /* Tick Correlation panel */
+    widget_panel_init(&layout->panel_corr, 0, 0, 0, 0, "Tick Correlation");
+    
+    /* Sync status panel */
+    widget_panel_init(&layout->panel_sync, 0, 0, 0, 0, "Sync Status");
+    widget_led_init(&layout->led_sync_locked, 0, 0, LED_RADIUS, COLOR_GREEN, COLOR_TEXT_DIM, "Locked");
+    
+    /* Minute marker panel */
+    widget_panel_init(&layout->panel_mark, 0, 0, 0, 0, "Minute Marker");
+    
     /* Initialize debug mode */
     layout->debug_mode = false;
     layout->edit_mode = false;
@@ -356,10 +366,35 @@ void ui_layout_recalculate(ui_layout_t* layout)
     layout->panel_config.w = 150; layout->panel_config.h = 301;
     
     layout->panel_wwv.x = 414; layout->panel_wwv.y = 151;
-    layout->panel_wwv.w = 300; layout->panel_wwv.h = 147;
+    layout->panel_wwv.w = 300; layout->panel_wwv.h = 250;
     
-    layout->panel_bcd.x = 414; layout->panel_bcd.y = 304;
-    layout->panel_bcd.w = 300; layout->panel_bcd.h = 148;
+    layout->panel_bcd.x = 414; layout->panel_bcd.y = 407;
+    layout->panel_bcd.w = 300; layout->panel_bcd.h = 150;
+    
+    layout->panel_corr.x = 414; layout->panel_corr.y = 563;
+    layout->panel_corr.w = 300; layout->panel_corr.h = 120;
+    
+    layout->panel_sync.x = 414; layout->panel_sync.y = 689;
+    layout->panel_sync.w = 300; layout->panel_sync.h = 140;
+    
+    layout->panel_mark.x = 414; layout->panel_mark.y = 835;
+    layout->panel_mark.w = 300; layout->panel_mark.h = 80;
+    
+    /* Telemetry panel (bottom left, below gain panel) */
+    layout->panel_telemetry.x = 6; layout->panel_telemetry.y = 458;
+    layout->panel_telemetry.w = 400; layout->panel_telemetry.h = 250;
+    
+    /* Telemetry tab buttons (across top of panel) */
+    int tab_w = 96;  /* 4 tabs * 96 = 384, leaves room for padding */
+    int tab_h = 22;
+    int tab_x = layout->panel_telemetry.x + 8;
+    int tab_y = layout->panel_telemetry.y + 20;
+    for (int i = 0; i < 4; i++) {
+        layout->tab_telemetry[i].x = tab_x + (i * tab_w);
+        layout->tab_telemetry[i].y = tab_y;
+        layout->tab_telemetry[i].w = tab_w - 2;
+        layout->tab_telemetry[i].h = tab_h;
+    }
     
     /* Frequency display */
     layout->freq_display.x = 0; layout->freq_display.y = 67;
@@ -374,8 +409,8 @@ void ui_layout_recalculate(ui_layout_t* layout)
     /* Regions (match panel positions) */
     layout->regions.freq_area = (SDL_Rect){6, 36, 708, 55};
     layout->regions.gain_panel = (SDL_Rect){6, 151, 100, 301};
-    layout->regions.wwv_panel = (SDL_Rect){414, 151, 300, 147};
-    layout->regions.bcd_panel = (SDL_Rect){414, 304, 300, 148};
+    layout->regions.wwv_panel = (SDL_Rect){414, 151, 300, 250};
+    layout->regions.bcd_panel = (SDL_Rect){414, 407, 300, 150};
     
     /* WWV indicator LEDs (inside panel) */
     layout->led_tone500.x = 434;
@@ -661,6 +696,13 @@ void ui_layout_update(ui_layout_t* layout, const mouse_state_t* mouse,
         }
     }
     
+    /* Update telemetry tab buttons */
+    for (int i = 0; i < 4; i++) {
+        if (widget_button_update(&layout->tab_telemetry[i], mouse)) {
+            layout->active_telemetry_tab = i;
+        }
+    }
+    
     /* Update external process buttons */
     if (widget_button_update(&layout->btn_server, mouse)) {
         actions->server_toggled = true;
@@ -807,6 +849,9 @@ void ui_layout_draw(ui_layout_t* layout, const app_state_t* state)
     
     widget_button_draw(&layout->btn_aff_interval_dec, layout->ui);
     widget_button_draw(&layout->btn_aff_interval_inc, layout->ui);
+    
+    /* Draw telemetry panel (bottom left) */
+    ui_layout_draw_telemetry_panel(layout);
     
     /* Draw footer */
     ui_layout_draw_footer(layout, state);
@@ -1389,4 +1434,274 @@ void ui_layout_draw_bcd_panel_from_telem(ui_layout_t* layout, const udp_telemetr
     /* Sync LED at bottom */
     layout->led_bcd_sync.on = (bcds->sync_state == BCD_MODEM_SYNC_LOCKED);
     widget_led_draw(&layout->led_bcd_sync, layout->ui);
+}
+
+/*
+ * Draw Tick Correlation panel
+ */
+void ui_layout_draw_corr_panel(ui_layout_t* layout, const udp_telemetry_t* telem)
+{
+    if (!layout || !layout->ui) return;
+    
+    /* Draw panel background */
+    widget_panel_draw(&layout->panel_corr, layout->ui);
+    
+    int x = layout->panel_corr.x + 8;
+    int y = layout->panel_corr.y + 22;
+    int line_h = 14;
+    char buf[128];
+    
+    if (!telem || !telem->corr.valid) {
+        ui_draw_text(layout->ui, layout->ui->font_small, "No correlation data", 
+                     x, y, COLOR_TEXT_DIM);
+        return;
+    }
+    
+    const telem_corr_t* corr = &telem->corr;
+    
+    /* Tick number and expected event */
+    snprintf(buf, sizeof(buf), "Tick #%d: %s", corr->tick_num, corr->expected);
+    ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_TEXT);
+    y += line_h;
+    
+    /* Chain info */
+    snprintf(buf, sizeof(buf), "Chain: #%d len=%d", corr->chain_id, corr->chain_len);
+    ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_GREEN);
+    y += line_h;
+    
+    /* Interval and drift */
+    snprintf(buf, sizeof(buf), "Interval: %.1fms (avg %.1fms)", 
+             corr->interval_ms, corr->avg_interval_ms);
+    ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_TEXT_DIM);
+    y += line_h;
+    
+    /* Drift with color coding */
+    uint32_t drift_color = COLOR_GREEN;
+    float abs_drift = corr->drift_ms < 0 ? -corr->drift_ms : corr->drift_ms;
+    if (abs_drift > 50.0f) drift_color = COLOR_RED;
+    else if (abs_drift > 20.0f) drift_color = COLOR_ORANGE;
+    
+    snprintf(buf, sizeof(buf), "Drift: %.1f ms", corr->drift_ms);
+    ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, drift_color);
+    y += line_h;
+    
+    /* Correlation ratio */
+    snprintf(buf, sizeof(buf), "Corr: %.1f (peak %.3f)", corr->corr_ratio, corr->corr_peak);
+    ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_TEXT_DIM);
+}
+
+/*
+ * Helper: Get sync state name
+ */
+static const char* get_sync_state_name(sync_state_t state)
+{
+    switch (state) {
+        case SYNC_ACQUIRING: return "ACQUIRING";
+        case SYNC_TENTATIVE: return "TENTATIVE";
+        case SYNC_LOCKED:    return "LOCKED";
+        case SYNC_RECOVERING: return "RECOVERING";
+        default: return "UNKNOWN";
+    }
+}
+
+/*
+ * Draw Sync Status panel with two sub-frames
+ */
+void ui_layout_draw_sync_panel(ui_layout_t* layout, const udp_telemetry_t* telem)
+{
+    if (!layout || !layout->ui) return;
+    
+    /* Draw main panel background */
+    widget_panel_draw(&layout->panel_sync, layout->ui);
+    
+    int panel_x = layout->panel_sync.x;
+    int panel_y = layout->panel_sync.y;
+    int panel_w = layout->panel_sync.w;
+    int line_h = 14;
+    char buf[128];
+    
+    /* Sub-frame 1: Marker Confirmation (top half) */
+    int frame1_y = panel_y + 20;
+    int frame1_h = 55;
+    
+    /* Draw sub-frame border */
+    SDL_Rect frame1 = { panel_x + 4, frame1_y, panel_w - 8, frame1_h };
+    SDL_SetRenderDrawColor(layout->ui->renderer, 60, 60, 70, 255);
+    SDL_RenderDrawRect(layout->ui->renderer, &frame1);
+    
+    /* Sub-frame 1 title */
+    ui_draw_text(layout->ui, layout->ui->font_small, "Marker Confirmation", 
+                 panel_x + 8, frame1_y + 2, COLOR_ACCENT);
+    
+    int x = panel_x + 8;
+    int y = frame1_y + 16;
+    
+    if (!telem || !telem->sync.valid) {
+        ui_draw_text(layout->ui, layout->ui->font_small, "No sync data", 
+                     x, y, COLOR_TEXT_DIM);
+    } else {
+        const telem_sync_t* sync = &telem->sync;
+        
+        /* State with color coding */
+        uint32_t state_color = COLOR_TEXT_DIM;
+        if (sync->state == SYNC_LOCKED) state_color = COLOR_GREEN;
+        else if (sync->state == SYNC_TENTATIVE) state_color = COLOR_ORANGE;
+        else if (sync->state == SYNC_RECOVERING) state_color = COLOR_RED;
+        
+        snprintf(buf, sizeof(buf), "State: %s  Markers: %d", 
+                 get_sync_state_name(sync->state), sync->marker_num);
+        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, state_color);
+        y += line_h;
+        
+        /* Interval and delta */
+        snprintf(buf, sizeof(buf), "Interval: %.1fs  Delta: %.1fms", 
+                 sync->interval_sec, sync->delta_ms);
+        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_TEXT_DIM);
+        y += line_h;
+        
+        /* Good intervals */
+        snprintf(buf, sizeof(buf), "Good intervals: %d", sync->good_intervals);
+        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, 
+                     sync->good_intervals >= 2 ? COLOR_GREEN : COLOR_TEXT_DIM);
+    }
+    
+    /* Sub-frame 2: State Transitions (bottom half) */
+    int frame2_y = frame1_y + frame1_h + 4;
+    int frame2_h = 50;
+    
+    /* Draw sub-frame border */
+    SDL_Rect frame2 = { panel_x + 4, frame2_y, panel_w - 8, frame2_h };
+    SDL_SetRenderDrawColor(layout->ui->renderer, 60, 60, 70, 255);
+    SDL_RenderDrawRect(layout->ui->renderer, &frame2);
+    
+    /* Sub-frame 2 title */
+    ui_draw_text(layout->ui, layout->ui->font_small, "State Transition", 
+                 panel_x + 8, frame2_y + 2, COLOR_ACCENT);
+    
+    x = panel_x + 8;
+    y = frame2_y + 16;
+    
+    if (!telem || !telem->sync.state_changed) {
+        ui_draw_text(layout->ui, layout->ui->font_small, "No transition yet", 
+                     x, y, COLOR_TEXT_DIM);
+    } else {
+        const telem_sync_t* sync = &telem->sync;
+        
+        /* Transition arrow */
+        snprintf(buf, sizeof(buf), "%s -> %s", 
+                 get_sync_state_name(sync->old_state),
+                 get_sync_state_name(sync->state));
+        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_TEXT);
+        y += line_h;
+        
+        /* Confidence */
+        uint32_t conf_color = COLOR_GREEN;
+        if (sync->confidence < 0.5f) conf_color = COLOR_RED;
+        else if (sync->confidence < 0.8f) conf_color = COLOR_ORANGE;
+        
+        snprintf(buf, sizeof(buf), "Confidence: %.0f%%", sync->confidence * 100.0f);
+        ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, conf_color);
+    }
+    
+    /* Sync locked LED at bottom of panel */
+    layout->led_sync_locked.x = panel_x + panel_w - 60;
+    layout->led_sync_locked.y = panel_y + layout->panel_sync.h - 18;
+    layout->led_sync_locked.on = (telem && telem->sync.valid && telem->sync.state == SYNC_LOCKED);
+    widget_led_draw(&layout->led_sync_locked, layout->ui);
+}
+
+/*
+ * Draw Minute Marker panel
+ */
+void ui_layout_draw_mark_panel(ui_layout_t* layout, const udp_telemetry_t* telem)
+{
+    if (!layout || !layout->ui) return;
+    
+    /* Draw panel background */
+    widget_panel_draw(&layout->panel_mark, layout->ui);
+    
+    int x = layout->panel_mark.x + 8;
+    int y = layout->panel_mark.y + 22;
+    int line_h = 14;
+    char buf[128];
+    
+    if (!telem || !telem->marker.valid) {
+        ui_draw_text(layout->ui, layout->ui->font_small, "No marker detected", 
+                     x, y, COLOR_TEXT_DIM);
+        return;
+    }
+    
+    const telem_marker_t* mark = &telem->marker;
+    
+    /* Marker number and duration */
+    snprintf(buf, sizeof(buf), "%s  Duration: %.0f ms", mark->marker_num, mark->duration_ms);
+    ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, COLOR_GREEN);
+    y += line_h;
+    
+    /* SNR with color coding */
+    uint32_t snr_color = COLOR_GREEN;
+    if (mark->snr_db < 10.0f) snr_color = COLOR_RED;
+    else if (mark->snr_db < 15.0f) snr_color = COLOR_ORANGE;
+    
+    snprintf(buf, sizeof(buf), "SNR: %.1f dB  Energy: %.4f", mark->snr_db, mark->accum_energy);
+    ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, snr_color);
+    y += line_h;
+    
+    /* Confidence with color coding */
+    uint32_t conf_color = COLOR_TEXT_DIM;
+    if (strcmp(mark->confidence, "HIGH") == 0) conf_color = COLOR_GREEN;
+    else if (strcmp(mark->confidence, "MED") == 0) conf_color = COLOR_ORANGE;
+    else if (strcmp(mark->confidence, "LOW") == 0) conf_color = COLOR_RED;
+    
+    snprintf(buf, sizeof(buf), "Confidence: %s", mark->confidence);
+    ui_draw_text(layout->ui, layout->ui->font_small, buf, x, y, conf_color);
+}
+/*
+ * Draw Telemetry panel with tabs (bottom left)
+ */
+void ui_layout_draw_telemetry_panel(ui_layout_t* layout)
+{
+    if (!layout || !layout->ui) return;
+    
+    /* Draw panel background */
+    widget_panel_draw(&layout->panel_telemetry, layout->ui);
+    
+    /* Draw tab buttons - highlight active tab */
+    for (int i = 0; i < 4; i++) {
+        widget_button_t* tab = &layout->tab_telemetry[i];
+        
+        /* Set toggled state for active tab */
+        tab->toggled = (i == layout->active_telemetry_tab);
+        
+        /* Draw the tab */
+        widget_button_draw(tab, layout->ui);
+    }
+    
+    /* Draw content area placeholder */
+    int content_x = layout->panel_telemetry.x + 8;
+    int content_y = layout->tab_telemetry[0].y + layout->tab_telemetry[0].h + 4;
+    int content_w = layout->panel_telemetry.w - 16;
+    int content_h = layout->panel_telemetry.h - (content_y - layout->panel_telemetry.y) - 8;
+    
+    /* Draw content border */
+    SDL_Rect content_rect = { content_x, content_y, content_w, content_h };
+    SDL_SetRenderDrawColor(layout->ui->renderer, 40, 40, 50, 255);
+    SDL_RenderFillRect(layout->ui->renderer, &content_rect);
+    SDL_SetRenderDrawColor(layout->ui->renderer, 80, 80, 90, 255);
+    SDL_RenderDrawRect(layout->ui->renderer, &content_rect);
+    
+    /* Draw placeholder text based on active tab */
+    const char* tab_labels[] = {
+        "Channel Quality Data",
+        "Carrier Tracking Data",
+        "Tone Tracking Data (500/600 Hz)",
+        "Debug Console Output"
+    };
+    
+    int text_y = content_y + 10;
+    ui_draw_text(layout->ui, layout->ui->font_small, tab_labels[layout->active_telemetry_tab],
+                 content_x + 8, text_y, COLOR_TEXT_DIM);
+    text_y += 18;
+    ui_draw_text(layout->ui, layout->ui->font_small, "(Implementation pending)",
+                 content_x + 8, text_y, COLOR_TEXT_DIM);
 }

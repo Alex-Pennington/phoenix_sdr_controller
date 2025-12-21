@@ -158,25 +158,35 @@
 ### Headers (✅ Complete)
 ```
 include/
-├── common.h        - Types, constants, colors, macros
-├── tcp_client.h    - TCP client API
-├── sdr_protocol.h  - Protocol handler API
-├── app_state.h     - Application state API
-├── ui_core.h       - SDL2 rendering API
-├── ui_widgets.h    - Widget definitions
-└── ui_layout.h     - Layout manager API
+├── common.h          - Types, constants, colors, macros
+├── tcp_client.h      - TCP client API
+├── sdr_protocol.h    - Protocol handler API
+├── app_state.h       - Application state API
+├── ui_core.h         - SDL2 rendering API
+├── ui_widgets.h      - Widget definitions
+├── ui_layout.h       - Layout manager API
+├── process_manager.h - Child process management (server, waterfall)
+├── udp_telemetry.h   - UDP telemetry receiver
+├── aff.h             - Automatic Frequency Following
+└── version.h         - Version info
 ```
 
-### Sources (❌ To Create)
+### Sources (✅ Complete)
 ```
 src/
-├── main.c          - Application entry point
-├── tcp_client.c    - Winsock TCP implementation
-├── sdr_protocol.c  - Command protocol implementation
-├── app_state.c     - State management
-├── ui_core.c       - SDL2 rendering functions
-├── ui_widgets.c    - Widget drawing/update
-└── ui_layout.c     - Main UI layout
+├── main.c            - Application entry point
+├── tcp_client.c      - Winsock TCP implementation
+├── sdr_protocol.c    - Command protocol implementation
+├── app_state.c       - State management
+├── ui_core.c         - SDL2 rendering functions
+├── ui_widgets.c      - Widget drawing/update
+├── ui_layout.c       - Main UI layout
+├── ui_layout_debug.c - F1 debug overlay
+├── ui_layout_edit.c  - F2/F3 layout editor
+├── process_manager.c - Child process spawning
+├── udp_telemetry.c   - UDP telemetry parsing
+├── aff.c             - AFF algorithm
+└── bdc/bcd_decoder.c - BCD time code decoder
 ```
 
 ---
@@ -230,6 +240,18 @@ src/
 
 ## Recent Changes
 
+- **GUI Layout Editor (F2/F3)**: Built-in visual layout editor for widget positioning
+  - F1: Debug mode with colored borders and coordinates (click to copy to clipboard)
+  - F2: Edit mode - drag and drop widgets to reposition
+  - F3: Dump positions to `layout_positions.txt` for code updates
+- **Waterfall Window Config**: Added width/height controls next to Wfall button
+  - `-`/`+` buttons to adjust width (400-2000px, step 50)
+  - `-`/`+` buttons to adjust height (300-1200px, step 50)
+  - Settings saved to INI file `[Processes]` section
+  - Waterfall.exe now launched with `-w WIDTH -H HEIGHT` args
+- **AFF Interval Control**: Replaced vertical slider with `-`/`+` button control
+  - Shows current interval (30s/45s/60s/90s/120s)
+  - Located in config panel below antenna dropdown
 - **Memory Presets (M1-M5)**: Added 5 memory preset buttons below WWV shortcuts
   - Short click: Recall preset (loads all settings)
   - Ctrl+click: Save current settings to preset
@@ -255,4 +277,4 @@ src/
 
 ---
 
-*Last Updated: December 15, 2025*
+*Last Updated: December 19, 2025*

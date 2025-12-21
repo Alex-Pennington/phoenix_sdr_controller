@@ -223,7 +223,7 @@ int udp_telemetry_poll(udp_telemetry_t* telem)
             packets++;
         } else {
             telem->parse_errors++;
-            LOG_DEBUG("Failed to parse telemetry: %s", buffer);
+            LOG_DEBUG("Failed to parse telemetry: %.80s", buffer);
         }
     }
     
@@ -445,17 +445,18 @@ telemetry_type_t udp_telemetry_parse(udp_telemetry_t* telem, const char* packet)
         return TELEM_BCDE;  /* Return new type (TELEM_BCD100 still works for legacy) */
     }
     else if (strcmp(token, "BCDS") == 0) {
-        /* BCDS - BCD decoder status from modem
-         * Subformats:
-         *   BCDS,STATUS,HH:MM:SS,timestamp_ms,sync_state,frame_pos,decoded,failed,symbols
-         *   BCDS,SYM,symbol,frame_pos,width_ms
-         *   BCDS,TIME,HH:MM:SS,hours,minutes,doy,year,dut1_sign,dut1_value
+        /* BCDS - BCD decoder messages with sub-types:
+         *   BCDS,TIME,time,timestamp_ms,pulse_count,peak_energy,duration_ms,noise_floor,snr_db
+         *   BCDS,FREQ,time,timestamp_ms,pulse_count,peak_energy,duration_ms,baseline,snr_db
+         *   BCDS,CORR,time,timestamp_ms,symbol_count,second,symbol,source,duration_ms,confidence,interval_sec,time_events,freq_events,time_energy,freq_energy,state
+         *   BCDS,SYM,symbol,second,duration_ms,confidence
+         *   BCDS,STATUS,time,timestamp_ms,mode,frame,parity,timecode,symbol_count
          */
         token = strtok(NULL, ",");
         if (!token) return TELEM_NONE;
         
         if (strcmp(token, "STATUS") == 0) {
-            /* STATUS,HH:MM:SS,timestamp_ms,sync_state,frame_pos,decoded,failed,symbols */
+            /* STATUS,time,timestamp_ms,mode,frame,parity,timecode,symbol_count */
             /* Skip time field */
             token = strtok(NULL, ",");
             if (!token) return TELEM_NONE;
@@ -463,27 +464,30 @@ telemetry_type_t udp_telemetry_parse(udp_telemetry_t* telem, const char* packet)
             token = strtok(NULL, ",");
             if (!token) return TELEM_NONE;
             
-            /* sync_state */
+            /* mode (MODEM or DECODE) */
             token = strtok(NULL, ",");
             if (!token) return TELEM_NONE;
-            telem->bcds.sync_state = parse_bcd_sync_state(token);
+            if (strcmp(token, "DECODE") == 0) {
+                telem->bcds.sync_state = BCD_MODEM_SYNC_LOCKED;
+            } else {
+                telem->bcds.sync_state = BCD_MODEM_SYNC_SEARCHING;
+            }
             
-            /* frame_pos */
+            /* frame (-1 if not tracking) */
             token = strtok(NULL, ",");
             if (!token) return TELEM_NONE;
             telem->bcds.frame_pos = atoi(token);
             
-            /* decoded */
+            /* parity (0=unknown, 1=good, -1=bad) - skip, no field */
             token = strtok(NULL, ",");
             if (!token) return TELEM_NONE;
-            telem->bcds.decoded_count = (uint32_t)atoi(token);
             
-            /* failed */
+            /* timecode (0=none, 1=valid) */
             token = strtok(NULL, ",");
             if (!token) return TELEM_NONE;
-            telem->bcds.failed_count = (uint32_t)atoi(token);
+            telem->bcds.time_valid = (atoi(token) == 1);
             
-            /* symbols */
+            /* symbol_count */
             token = strtok(NULL, ",");
             if (!token) return TELEM_NONE;
             telem->bcds.symbol_count = (uint32_t)atoi(token);
@@ -493,7 +497,7 @@ telemetry_type_t udp_telemetry_parse(udp_telemetry_t* telem, const char* packet)
         }
         else if (strcmp(token, "SYM") == 0) {
             /* SYM,symbol,second,duration_ms,confidence */
-            /* symbol (0, 1, P) */
+            /* symbol (0, 1, P, ?) */
             token = strtok(NULL, ",");
             if (!token) return TELEM_NONE;
             telem->bcds.last_symbol = token[0];
@@ -502,9 +506,9 @@ telemetry_type_t udp_telemetry_parse(udp_telemetry_t* telem, const char* packet)
             token = strtok(NULL, ",");
             if (!token) return TELEM_NONE;
             telem->bcds.last_symbol_second = atoi(token);
-            telem->bcds.last_symbol_pos = telem->bcds.last_symbol_second;  /* Same value */
+            telem->bcds.last_symbol_pos = telem->bcds.last_symbol_second;
             
-            /* duration_ms (width) */
+            /* duration_ms */
             token = strtok(NULL, ",");
             if (!token) return TELEM_NONE;
             telem->bcds.last_symbol_width_ms = (float)atof(token);
@@ -518,55 +522,82 @@ telemetry_type_t udp_telemetry_parse(udp_telemetry_t* telem, const char* packet)
             telem->bcds.last_update = now;
         }
         else if (strcmp(token, "TIME") == 0) {
-            /* TIME,HH:MM:SS,hours,minutes,doy,year,dut1_sign,dut1_value */
-            /* Skip time string */
+            /* TIME,time,timestamp_ms,pulse_count,peak_energy,duration_ms,noise_floor,snr_db */
+            /* Skip time field */
             token = strtok(NULL, ",");
             if (!token) return TELEM_NONE;
-            
-            /* hours */
+            /* Skip timestamp_ms */
             token = strtok(NULL, ",");
             if (!token) return TELEM_NONE;
-            telem->bcds.hours = atoi(token);
-            
-            /* minutes */
+            /* pulse_count */
             token = strtok(NULL, ",");
             if (!token) return TELEM_NONE;
-            telem->bcds.minutes = atoi(token);
-            
-            /* doy */
+            telem->bcds.symbol_count = (uint32_t)atoi(token);
+            /* peak_energy - skip */
             token = strtok(NULL, ",");
             if (!token) return TELEM_NONE;
-            telem->bcds.day_of_year = atoi(token);
-            
-            /* year */
+            /* duration_ms */
             token = strtok(NULL, ",");
             if (!token) return TELEM_NONE;
-            telem->bcds.year = atoi(token);
-            
-            /* dut1_sign */
+            telem->bcds.last_symbol_width_ms = (float)atof(token);
+            /* noise_floor - skip */
             token = strtok(NULL, ",");
-            if (!token) return TELEM_NONE;
-            telem->bcds.dut1_sign = atoi(token);
-            
-            /* dut1_value */
+            /* snr_db - skip */
             token = strtok(NULL, ",");
-            if (!token) return TELEM_NONE;
-            telem->bcds.dut1_value = (float)atof(token);
             
-            telem->bcds.time_valid = true;
             telem->bcds.valid = true;
             telem->bcds.last_update = now;
+        }
+        else if (strcmp(token, "FREQ") == 0) {
+            /* FREQ,time,timestamp_ms,pulse_count,peak_energy,duration_ms,baseline,snr_db */
+            /* Similar to TIME - just acknowledge */
+            telem->bcds.valid = true;
+            telem->bcds.last_update = now;
+        }
+        else if (strcmp(token, "CORR") == 0) {
+            /* CORR,time,timestamp_ms,symbol_count,second,symbol,source,duration_ms,confidence,... */
+            /* Skip time field */
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            /* Skip timestamp_ms */
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            /* symbol_count */
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            telem->bcds.symbol_count = (uint32_t)atoi(token);
+            /* second */
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            telem->bcds.last_symbol_second = atoi(token);
+            telem->bcds.last_symbol_pos = telem->bcds.last_symbol_second;
+            /* symbol */
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            telem->bcds.last_symbol = token[0];
+            /* source - skip */
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            /* duration_ms */
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            telem->bcds.last_symbol_width_ms = (float)atof(token);
+            /* confidence */
+            token = strtok(NULL, ",");
+            if (!token) return TELEM_NONE;
+            telem->bcds.last_symbol_confidence = (float)atof(token);
+            /* Rest of fields - skip */
             
-            LOG_INFO("[BCD] Decoded: %02d:%02d DOY=%03d Year=%02d DUT1=%+.1fs",
-                     telem->bcds.hours, telem->bcds.minutes,
-                     telem->bcds.day_of_year, telem->bcds.year,
-                     telem->bcds.dut1_sign * telem->bcds.dut1_value);
+            telem->bcds.valid = true;
+            telem->bcds.last_update = now;
         }
         
         return TELEM_BCDS;
     }
     else if (strcmp(token, "MARK") == 0) {
-        /* MARK,time,timestamp_ms,marker_num,wwv_sec,expected,accum_energy,duration_ms,since_last_sec,baseline,threshold */
+        /* MARK - Marker Correlator Summary (per protocol doc)
+         * Format: MARK,time,timestamp_ms,marker_num,duration_ms,peak_energy,snr_db,confidence
+         */
         /* Skip time field */
         token = strtok(NULL, ",");
         if (!token) return TELEM_NONE;
@@ -574,35 +605,33 @@ telemetry_type_t udp_telemetry_parse(udp_telemetry_t* telem, const char* packet)
         token = strtok(NULL, ",");
         if (!token) return TELEM_NONE;
         
-        /* marker_num (e.g., "M1", "M2") */
+        /* marker_num (int) */
         token = strtok(NULL, ",");
         if (!token) return TELEM_NONE;
-        strncpy(telem->marker.marker_num, token, sizeof(telem->marker.marker_num) - 1);
-        telem->marker.marker_num[sizeof(telem->marker.marker_num) - 1] = '\0';
+        snprintf(telem->marker.marker_num, sizeof(telem->marker.marker_num), "M%s", token);
         
-        /* wwv_sec */
+        /* duration_ms */
         token = strtok(NULL, ",");
         if (!token) return TELEM_NONE;
-        telem->marker.wwv_sec = atoi(token);
+        telem->marker.duration_ms = (float)atof(token);
         
-        /* expected */
+        /* peak_energy */
         token = strtok(NULL, ",");
         if (!token) return TELEM_NONE;
-        strncpy(telem->marker.expected, token, sizeof(telem->marker.expected) - 1);
-        telem->marker.expected[sizeof(telem->marker.expected) - 1] = '\0';
+        telem->marker.accum_energy = (float)atof(token);
         
-        /* accum_energy, duration_ms, since_last_sec, baseline, threshold */
-        float values[5];
-        for (int i = 0; i < 5; i++) {
-            token = strtok(NULL, ",");
-            if (!token) return TELEM_NONE;
-            values[i] = (float)atof(token);
+        /* snr_db */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        telem->marker.snr_db = (float)atof(token);
+        
+        /* confidence (LOW, MED, HIGH) */
+        token = strtok(NULL, ",");
+        if (token) {
+            strncpy(telem->marker.confidence, token, sizeof(telem->marker.confidence) - 1);
+            telem->marker.confidence[sizeof(telem->marker.confidence) - 1] = '\0';
         }
-        telem->marker.accum_energy = values[0];
-        telem->marker.duration_ms = values[1];
-        telem->marker.since_last_sec = values[2];
-        telem->marker.baseline = values[3];
-        telem->marker.threshold = values[4];
+        
         telem->marker.valid = true;
         telem->marker.last_update = now;
         
@@ -660,12 +689,143 @@ telemetry_type_t udp_telemetry_parse(udp_telemetry_t* telem, const char* packet)
             LOG_INFO("[SYNC] State transition: %s → %s (confidence=%.2f)", 
                     old_state, new_state, conf);
             
-            /* Update current state */
+            /* Store transition info */
+            telem->sync.old_state = parse_sync_state(old_state);
             telem->sync.state = parse_sync_state(new_state);
+            telem->sync.confidence = conf;
+            telem->sync.state_changed = true;
+            telem->sync.state_update = now;
             telem->sync.valid = true;
             telem->sync.last_update = now;
         }
         return TELEM_SYNC;
+    }
+    else if (strcmp(token, "TICK") == 0) {
+        /* TICK,time,timestamp_ms,tick_num,expected,energy_peak,duration_ms,interval_ms,avg_interval_ms,noise_floor,corr_peak,corr_ratio */
+        /* Skip time field */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        /* Skip timestamp_ms */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        /* tick_num */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        telem->sync.marker_num = atoi(token);  /* Reuse sync field for tick count */
+        /* expected - skip */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        /* energy_peak - skip */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        /* duration_ms */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        telem->sync.tick_dur_ms = (float)atof(token);
+        /* interval_ms */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        telem->sync.interval_sec = (float)atof(token) / 1000.0f;  /* Convert to seconds */
+        /* Rest of fields - just acknowledge */
+        
+        telem->sync.valid = true;
+        telem->sync.last_update = now;
+        
+        return TELEM_SYNC;  /* Update sync with tick info */
+    }
+    else if (strcmp(token, "CORR") == 0) {
+        /* CORR,time,timestamp_ms,tick_num,expected,energy_peak,duration_ms,interval_ms,avg_interval_ms,noise_floor,corr_peak,corr_ratio,chain_id,chain_len,chain_start_ms,drift_ms */
+        /* Skip time field */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        /* Skip timestamp_ms */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        
+        /* tick_num */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        telem->corr.tick_num = atoi(token);
+        
+        /* expected */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        strncpy(telem->corr.expected, token, sizeof(telem->corr.expected) - 1);
+        telem->corr.expected[sizeof(telem->corr.expected) - 1] = '\0';
+        
+        /* energy_peak */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        telem->corr.energy_peak = (float)atof(token);
+        
+        /* duration_ms */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        telem->corr.duration_ms = (float)atof(token);
+        
+        /* interval_ms */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        telem->corr.interval_ms = (float)atof(token);
+        
+        /* avg_interval_ms */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        telem->corr.avg_interval_ms = (float)atof(token);
+        
+        /* noise_floor */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        telem->corr.noise_floor = (float)atof(token);
+        
+        /* corr_peak */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        telem->corr.corr_peak = (float)atof(token);
+        
+        /* corr_ratio */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        telem->corr.corr_ratio = (float)atof(token);
+        
+        /* chain_id */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        telem->corr.chain_id = atoi(token);
+        
+        /* chain_len */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        telem->corr.chain_len = atoi(token);
+        
+        /* chain_start_ms */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        telem->corr.chain_start_ms = (float)atof(token);
+        
+        /* drift_ms */
+        token = strtok(NULL, ",");
+        if (!token) return TELEM_NONE;
+        telem->corr.drift_ms = (float)atof(token);
+        
+        telem->corr.valid = true;
+        telem->corr.last_update = now;
+        
+        /* Also update sync marker_num for display */
+        telem->sync.marker_num = telem->corr.tick_num;
+        telem->sync.valid = true;
+        telem->sync.last_update = now;
+        
+        return TELEM_SYNC;
+    }
+    else if (strcmp(token, "CONS") == 0) {
+        /* CONS,message - console debug messages */
+        /* Just log it */
+        token = strtok(NULL, "");  /* Get rest of line as message */
+        if (token) {
+            LOG_DEBUG("[CONS] %s", token);
+        }
+        return TELEM_NONE;
     }
     
     return TELEM_NONE;

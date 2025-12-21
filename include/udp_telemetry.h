@@ -149,11 +149,13 @@ typedef struct {
     char marker_num[8];     /* Marker label (M1, M2, etc.) */
     int wwv_sec;            /* WWV second position (0-59) */
     char expected[32];      /* Expected WWV event */
-    float accum_energy;     /* Accumulated energy during marker */
+    float accum_energy;     /* Accumulated energy / peak_energy during marker */
     float duration_ms;      /* Marker pulse duration (ms) */
     float since_last_sec;   /* Time since last marker (seconds) */
     float baseline;         /* Energy baseline level */
     float threshold;        /* Detection threshold */
+    float snr_db;           /* SNR of marker (dB) - correlator format */
+    char confidence[8];     /* Confidence label (LOW, MED, HIGH) - correlator format */
     bool valid;
     uint32_t last_update;
 } telem_marker_t;
@@ -170,7 +172,31 @@ typedef struct {
     float last_confirmed_ms;/* Timestamp of last confirmed marker (ms since start) */
     bool valid;
     uint32_t last_update;
+    /* STATE transition info */
+    sync_state_t old_state; /* Previous state before transition */
+    float confidence;       /* Transition confidence (0.0-1.0) */
+    bool state_changed;     /* True if a state transition occurred */
+    uint32_t state_update;  /* Timestamp of last state transition */
 } telem_sync_t;
+
+/* CORR - Tick correlation chain data */
+typedef struct {
+    int tick_num;           /* Tick number in sequence */
+    char expected[16];      /* Expected WWV event */
+    float energy_peak;      /* Peak energy value */
+    float duration_ms;      /* Pulse duration (ms) */
+    float interval_ms;      /* Interval since last tick (ms) */
+    float avg_interval_ms;  /* Average interval (ms) */
+    float noise_floor;      /* Noise floor */
+    float corr_peak;        /* Correlation peak */
+    float corr_ratio;       /* Correlation ratio */
+    int chain_id;           /* Current correlation chain identifier */
+    int chain_len;          /* Current correlation chain length */
+    float chain_start_ms;   /* Timestamp (ms) where chain started */
+    float drift_ms;         /* Accumulated timing drift (ms) */
+    bool valid;
+    uint32_t last_update;
+} telem_corr_t;
 
 /* Complete telemetry state */
 typedef struct {
@@ -183,6 +209,7 @@ typedef struct {
     telem_bcds_t bcds;          /* BCDS - decoder status from modem */
     telem_marker_t marker;
     telem_sync_t sync;
+    telem_corr_t corr;          /* CORR - tick correlation chain */
     
     /* Connection state */
     socket_t socket;

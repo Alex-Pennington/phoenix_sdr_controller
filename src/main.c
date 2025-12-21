@@ -237,6 +237,21 @@ int main(int argc, char* argv[])
             ui_layout_draw_bcd_panel(app.layout, app.bcd_decoder);
         }
         
+        /* Draw Tick Correlation panel */
+        if (app.telemetry) {
+            ui_layout_draw_corr_panel(app.layout, app.telemetry);
+        }
+        
+        /* Draw Sync Status panel */
+        if (app.telemetry) {
+            ui_layout_draw_sync_panel(app.layout, app.telemetry);
+        }
+        
+        /* Draw Minute Marker panel */
+        if (app.telemetry) {
+            ui_layout_draw_mark_panel(app.layout, app.telemetry);
+        }
+        
         /* Draw debug overlay (F1 to toggle) */
         ui_layout_draw_debug(app.layout);
         
