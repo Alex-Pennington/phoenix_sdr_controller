@@ -22,6 +22,9 @@
 #define STATUS_POLL_INTERVAL_MS  500
 #define KEEPALIVE_INTERVAL_MS    60000
 
+/* Relay mode port */
+#define RELAY_CONTROL_PORT 3001
+
 /* Application context */
 typedef struct {
     tcp_client_t* tcp;
@@ -53,13 +56,35 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 {
     (void)hInstance;
     (void)hPrevInstance;
-    (void)lpCmdLine;
     (void)nCmdShow;
+    
+    /* Parse --relay flag from command line */
+    char relay_host[256] = {0};
+    if (lpCmdLine && lpCmdLine[0]) {
+        char* relay_arg = strstr(lpCmdLine, "--relay");
+        if (relay_arg) {
+            relay_arg += 7; /* Skip "--relay" */
+            while (*relay_arg == ' ') relay_arg++; /* Skip spaces */
+            if (*relay_arg) {
+                int i = 0;
+                while (*relay_arg && *relay_arg != ' ' && i < 255) {
+                    relay_host[i++] = *relay_arg++;
+                }
+                relay_host[i] = '\0';
+            }
+        }
+    }
 #else
 int main(int argc, char* argv[])
 {
-    (void)argc;
-    (void)argv;
+    /* Parse --relay flag from command line */
+    char relay_host[256] = {0};
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--relay") == 0 && i + 1 < argc) {
+            strncpy(relay_host, argv[i + 1], 255);
+            break;
+        }
+    }
 #endif
     
     LOG_INFO("Phoenix SDR Controller v%s starting", APP_VERSION);
@@ -71,6 +96,13 @@ int main(int argc, char* argv[])
         LOG_ERROR("Application initialization failed");
         app_shutdown(&app);
         return 1;
+    }
+    
+    /* Apply relay mode if specified */
+    if (relay_host[0]) {
+        strncpy(app.state->server_host, relay_host, sizeof(app.state->server_host) - 1);
+        app.state->server_port = RELAY_CONTROL_PORT;
+        LOG_INFO("Relay mode: connecting to %s:%d", relay_host, RELAY_CONTROL_PORT);
     }
     
     LOG_INFO("Application initialized successfully");
