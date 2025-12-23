@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(phoenix_sdr_controller VERSION 0.3.1 LANGUAGES C)
+project(phoenix_sdr_controller VERSION 0.3.2 LANGUAGES C)
 
 # Phoenix Build System integration
 include(external/phoenix-build-scripts/cmake/phoenix-build.cmake)
