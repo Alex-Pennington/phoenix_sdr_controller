@@ -187,3 +187,158 @@
 [INFO] Saved process config to phoenix_sdr_presets.ini
 [INFO] Winsock cleaned up
 [INFO] Phoenix SDR Controller exiting
+
+=== Session started ===
+[INFO] Phoenix SDR Controller v0.6.1 starting
+
+=== Session started ===
+[INFO] Winsock initialized
+
+=== Session started ===
+[INFO] Loaded presets from phoenix_sdr_presets.ini
+[INFO] Loaded presets from phoenix_sdr_presets.ini
+
+=== Session started ===
+[INFO] Loaded window position: 0,31 size: 720x973
+[INFO] UI Core initialized (720x480)
+
+=== Session started ===
+[INFO] UI Layout created
+
+=== Session started ===
+[INFO] Process manager initialized
+[INFO] Loaded process config from phoenix_sdr_presets.ini
+
+=== Session started ===
+[INFO] UDP telemetry receiver created for port 3005
+[INFO] UDP telemetry listening on port 3005
+[INFO] UDP telemetry listening on port 3005
+
+=== Session started ===
+[INFO] AFF module created
+
+=== Session started ===
+[INFO] [BCD] Frame assembler created, frame position from modem
+[INFO] Application initialized successfully
+[INFO] Connecting to 127.0.0.1:4535
+[ERROR] connect() failed: 10061
+[ERROR] Connection failed: connect() failed: 10061
+[INFO] Connecting to 127.0.0.1:4535
+[ERROR] connect() failed: 10061
+[ERROR] Connection failed: connect() failed: 10061
+[INFO] Main loop ended
+[INFO] Process manager shutting down...
+[INFO] Process manager shutdown complete
+[INFO] AFF module destroyed
+[INFO] UDP telemetry stopped
+[INFO] UDP telemetry receiver destroyed
+[INFO] UI Layout destroyed
+[INFO] Saved window position: 0,31 size: 720x973
+[INFO] UI Core shutdown
+[INFO] Saved presets to phoenix_sdr_presets.ini
+[INFO] Saved process config to phoenix_sdr_presets.ini
+[INFO] Winsock cleaned up
+[INFO] Phoenix SDR Controller exiting
+
+=== Session started ===
+[INFO] Phoenix SDR Controller v0.6.1 starting
+
+=== Session started ===
+[INFO] Winsock initialized
+
+=== Session started ===
+[INFO] Loaded presets from phoenix_sdr_presets.ini
+[INFO] Loaded presets from phoenix_sdr_presets.ini
+
+=== Session started ===
+[INFO] Loaded window position: 0,31 size: 720x973
+[INFO] UI Core initialized (720x480)
+
+=== Session started ===
+[INFO] UI Layout created
+
+=== Session started ===
+[INFO] Process manager initialized
+[INFO] Loaded process config from phoenix_sdr_presets.ini
+
+=== Session started ===
+[INFO] UDP telemetry receiver created for port 3005
+[INFO] UDP telemetry listening on port 3005
+[INFO] UDP telemetry listening on port 3005
+
+=== Session started ===
+[INFO] AFF module created
+
+=== Session started ===
+[INFO] [BCD] Frame assembler created, frame position from modem
+[INFO] Application initialized successfully
+[INFO] Connecting to 127.0.0.1:4535
+[ERROR] connect() failed: 10061
+[ERROR] Connection failed: connect() failed: 10061
+[INFO] Main loop ended
+[INFO] Process manager shutting down...
+[INFO] Process manager shutdown complete
+[INFO] AFF module destroyed
+[INFO] UDP telemetry stopped
+[INFO] UDP telemetry receiver destroyed
+[INFO] UI Layout destroyed
+[INFO] Saved window position: 0,31 size: 720x973
+[INFO] UI Core shutdown
+[INFO] Saved presets to phoenix_sdr_presets.ini
+[INFO] Saved process config to phoenix_sdr_presets.ini
+[INFO] Winsock cleaned up
+[INFO] Phoenix SDR Controller exiting
+
+=== Session started ===
+[INFO] Phoenix SDR Controller v0.6.1 starting
+
+=== Session started ===
+[INFO] Winsock initialized
+
+=== Session started ===
+[INFO] Loaded presets from phoenix_sdr_presets.ini
+[INFO] Loaded presets from phoenix_sdr_presets.ini
+
+=== Session started ===
+[INFO] Loaded window position: 0,31 size: 720x973
+[INFO] UI Core initialized (720x480)
+
+=== Session started ===
+[INFO] UI Layout created
+
+=== Session started ===
+[INFO] Process manager initialized
+[INFO] Loaded process config from phoenix_sdr_presets.ini
+
+=== Session started ===
+[INFO] UDP telemetry receiver created for port 3005
+[INFO] UDP telemetry listening on port 3005
+[INFO] UDP telemetry listening on port 3005
+
+=== Session started ===
+[INFO] AFF module created
+
+=== Session started ===
+[INFO] [BCD] Frame assembler created, frame position from modem
+[INFO] Phoenix Discovery listening for sdr_server announcements
+[INFO] Application initialized successfully
+[INFO] Connecting to 127.0.0.1:4535
+[ERROR] connect() failed: 10061
+[ERROR] Connection failed: connect() failed: 10061
+[INFO] Discovered SDR Server: SDR-SERVER-1 at 192.168.1.153:4535
+[INFO] Connecting to 127.0.0.1:4535
+[ERROR] connect() failed: 10061
+[ERROR] Connection failed: connect() failed: 10061
+[INFO] Main loop ended
+[INFO] Process manager shutting down...
+[INFO] Process manager shutdown complete
+[INFO] AFF module destroyed
+[INFO] UDP telemetry stopped
+[INFO] UDP telemetry receiver destroyed
+[INFO] UI Layout destroyed
+[INFO] Saved window position: 0,31 size: 720x973
+[INFO] UI Core shutdown
+[INFO] Saved presets to phoenix_sdr_presets.ini
+[INFO] Saved process config to phoenix_sdr_presets.ini
+[INFO] Winsock cleaned up
+[INFO] Phoenix SDR Controller exiting

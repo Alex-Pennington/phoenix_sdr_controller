@@ -52,25 +52,51 @@ CLOSE_SOCKET() // closesocket() or close()
 ### UI Color Constants
 Use predefined colors from `common.h`: `COLOR_BG_DARK`, `COLOR_ACCENT`, `COLOR_GREEN`, etc.
 
-## Build System
+## Build System (P0)
 
-**Environment:** Requires `$env:VCPKG_ROOT` environment variable set to vcpkg installation path.
+Use the phoenix-build-scripts submodule exclusively for install, build, and release. Do not run ad-hoc CMake commands; follow the script workflow.
+
+- Submodule: `external/phoenix-build-scripts`
+- CMake integration: add after `project(...)` → `include(external/phoenix-build-scripts/cmake/phoenix-build.cmake)`
+
+### Install / Initialize
+Bootstrap presets and config via the submodule installer:
 
 ```powershell
-# Prerequisites: vcpkg with SDL2 and SDL2_ttf
-vcpkg install sdl2:x64-windows sdl2-ttf:x64-windows
-
-# Configure (uses VCPKG_ROOT env var)
-cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
-
-# Build
-cmake --build build --config Release
-
-# Or use the build script
-.\build.ps1 -Release
+./external/phoenix-build-scripts/scripts/init-project.ps1 \
+        -ProjectName "phoenix-sdr-controller" \
+        -GitHubRepo "Alex-Pennington/phoenix_sdr_controller" \
+        -Executables @("phoenix_sdr_controller.exe") \
+        -DLLs @("SDL2.dll","SDL2_ttf.dll") \
+        -PackageFiles @("README.md","LICENSE","docs/")
 ```
 
-**IMPORTANT:** Do not delete the `build/` directory unnecessarily. If reconfiguration is needed, use the cmake command above. See `docs/BUILD.md` for full setup instructions.
+### Development Build
+Increments BUILD only, compiles, verifies, and packages locally (dry run):
+
+```powershell
+./external/phoenix-build-scripts/scripts/deploy-release.ps1
+```
+
+### Release Build
+Bumps semantic version and performs a full build + package (no deploy):
+
+```powershell
+./external/phoenix-build-scripts/scripts/deploy-release.ps1 -IncrementPatch
+```
+
+### Deploy to GitHub
+Builds, tags, and uploads release to GitHub:
+
+```powershell
+./external/phoenix-build-scripts/scripts/deploy-release.ps1 -IncrementPatch -Deploy
+```
+
+Notes:
+- Version format: MAJOR.MINOR.PATCH+BUILD.COMMIT[-dirty]
+- Config files: `phoenix-build.json`, `.phoenix-build-number`
+- Generated header: `build/.../include/version.h` from submodule template
+- No CI/CD required; releases are manual via the deploy script
 
 ## Implementation Status
 
@@ -94,6 +120,6 @@ Check [PROGRESS.md](../PROGRESS.md) for current implementation status. Headers i
 ## Agent Behavior
 
 - **Don't go down rabbit holes.** If a build fails, check the documented build process first before trying alternative approaches.
-- **Don't delete the build directory** unless explicitly asked. Reconfigure instead.
+- **Don't delete the build directory** unless explicitly asked. Use presets/scripts to reconfigure.
 - **Stay focused on the task.** If asked to add an icon, add an icon—don't rewrite the build system.
-- **Reference this file and `docs/BUILD.md`** before running build commands.
+- **Reference this file and the submodule README** before running build commands.

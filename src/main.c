@@ -13,6 +13,7 @@
 #include "ui_layout.h"
 #include "process_manager.h"
 #include "udp_telemetry.h"
+#include "pn_discovery.h"
 #include "aff.h"
 #include "bdc/bcd_decoder.h"
 
@@ -43,6 +44,38 @@ static void app_handle_actions(app_context_t* app, const ui_actions_t* actions);
 static void app_periodic_tasks(app_context_t* app);
 static void app_connect(app_context_t* app);
 static void app_disconnect(app_context_t* app);
+
+/* Phoenix Discovery callback - called when sdr_server is discovered */
+static void on_sdr_server_discovered(const char *id, const char *service,
+                                     const char *ip, int ctrl_port, int data_port,
+                                     const char *caps, bool is_bye, void *userdata)
+{
+    app_context_t* app = (app_context_t*)userdata;
+    
+    if (!app || !app->state) {
+        return;
+    }
+    
+    /* Only process sdr_server announcements */
+    if (strcmp(service, "sdr_server") != 0) {
+        return;
+    }
+    
+    if (is_bye) {
+        LOG_INFO("SDR Server left: %s", id);
+    } else {
+        LOG_INFO("Discovered SDR Server: %s at %s:%d", id, ip, ctrl_port);
+        
+        /* Only update if not currently connected */
+        if (app->state->conn_state == CONN_DISCONNECTED) {
+            strncpy(app->state->server_host, ip, sizeof(app->state->server_host) - 1);
+            app->state->server_port = ctrl_port;
+            
+            snprintf(app->state->status_message, sizeof(app->state->status_message),
+                     "Discovered %s at %s:%d", id, ip, ctrl_port);
+        }
+    }
+}
 
 /*
  * Windows entry point
@@ -353,6 +386,17 @@ static bool app_init(app_context_t* app)
         LOG_WARN("Failed to create BCD decoder");
     }
     
+    /* Initialize Phoenix Discovery for sdr_server auto-discovery */
+    if (pn_discovery_init(0) == 0) {  /* Use default port 5400 */
+        if (pn_listen(on_sdr_server_discovered, app) == 0) {
+            LOG_INFO("Phoenix Discovery listening for sdr_server announcements");
+        } else {
+            LOG_WARN("Failed to start Phoenix Discovery listener");
+        }
+    } else {
+        LOG_WARN("Failed to initialize Phoenix Discovery - auto-discovery disabled");
+    }
+    
     return true;
 }
 
@@ -375,6 +419,9 @@ static void app_shutdown(app_context_t* app)
         bcd_decoder_destroy(app->bcd_decoder);
         app->bcd_decoder = NULL;
     }
+    
+    /* Shutdown Phoenix Discovery */
+    pn_discovery_shutdown();
     
     /* Shutdown UDP telemetry */
     if (app->telemetry) {

@@ -25,3 +25,8 @@ Makefile
 
 # vcpkg (when installed locally)
 vcpkg_installed/
+
+# Phoenix Build System
+build/
+install/
+*.zip

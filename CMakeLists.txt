@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.16)
-project(phoenix_sdr_controller VERSION 0.3.0 LANGUAGES C)
+project(phoenix_sdr_controller VERSION 0.3.1 LANGUAGES C)
+
+# Phoenix Build System integration
+include(external/phoenix-build-scripts/cmake/phoenix-build.cmake)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -37,6 +40,9 @@ else()
     set(SDL2_TTF_LIBRARIES "${SDL2_TTF_DIR}/lib/libSDL2_ttf.dll.a")
     set(SDL2_TTF_DLL "${SDL2_TTF_DIR}/bin/SDL2_ttf.dll")
 endif()
+
+# Phoenix Discovery submodule
+add_subdirectory(external/phoenix-discovery)
 
 # Source files
 set(SOURCES
@@ -86,6 +92,7 @@ if(USE_VCPKG_SDL2)
         SDL2::SDL2
         SDL2::SDL2main
         SDL2_ttf::SDL2_ttf
+        pn_discovery
     )
 else()
     # Link using hardcoded paths
@@ -96,6 +103,7 @@ else()
     target_link_libraries(${PROJECT_NAME} PRIVATE 
         ${SDL2_LIBRARIES}
         ${SDL2_TTF_LIBRARIES}
+        pn_discovery
     )
 endif()
 

@@ -1,0 +1,19 @@
+{
+  "projectName": "phoenix-sdr-controller",
+  "description": "Windows SDL2 GUI application for remote control of Phoenix SDR",
+  "githubRepo": "Alex-Pennington/phoenix_sdr_controller",
+  "executables": ["phoenix_sdr_controller.exe"],
+  "dlls": [
+    "SDL2.dll",
+    "SDL2_ttf.dll"
+  ],
+  "packageFiles": [
+    "README.md",
+    "LICENSE"
+  ],
+  "platforms": ["windows"],
+  "vcpkgDependencies": [
+    "sdl2:x64-windows",
+    "sdl2-ttf:x64-windows"
+  ]
+}
